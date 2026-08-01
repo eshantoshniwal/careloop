@@ -1,9 +1,12 @@
 import type WebSocket from 'ws';
 import { getModule } from '../conditions/registry.js';
+import { env } from '../config/env.js';
 import { DeepgramAgent } from '../integrations/deepgram.js';
 import { logger } from '../logger.js';
 import { runPostCallPipeline } from '../orchestration/postcall.js';
 import { buildAgentPrompt, buildGreeting } from '../orchestration/prompt.js';
+import type { StateModeView } from '../orchestration/renderers.js';
+import { FlowStateMachine } from '../orchestration/statemachine.js';
 import {
   AGENT_FUNCTIONS,
   createCallState,
@@ -29,6 +32,8 @@ export class CallSession {
   /** Twilio call SID, set once the call is placed. Used by the call log. */
   callSid?: string;
   private agent?: DeepgramAgent;
+  /** Set only under ORCH_MODE=state; the bridge then drives the interview. */
+  private machine?: FlowStateMachine;
   private twilioSocket?: WebSocket;
   private streamSid?: string;
   private ended = false;
@@ -88,9 +93,15 @@ export class CallSession {
     if (this.agent) return;
     const module = getModule(this.context.moduleId);
 
+    if (env.orchMode === 'state') {
+      this.machine = new FlowStateMachine(module, this.context);
+    }
+
     const agent = new DeepgramAgent({
       prompt: buildAgentPrompt({ module, context: this.context }),
       greeting: buildGreeting(this.context),
+      // Full list in both modes: Deepgram fixes the function set at Settings
+      // time, so state mode gates tools through the per-node prompt instead.
       functions: AGENT_FUNCTIONS,
     });
     this.agent = agent;
@@ -116,7 +127,13 @@ export class CallSession {
           name: call.name,
           args: call.args,
         });
-        agent.respondToFunctionCall(call.id, call.name, result.say);
+        // Advance the flow BEFORE responding: the next node's cue rides the
+        // function result, which the model reads before its next utterance —
+        // the UpdatePrompt nudge alone arrives one turn too late.
+        const view = this.machine?.onToolResult(call.name, result.detail);
+        const content = view?.cue ? `${result.say}\n\nNEXT STEP → ${view.cue}` : result.say;
+        agent.respondToFunctionCall(call.id, call.name, content);
+        this.followFlow(view);
 
         // Submission is the signal that the clinical content of the call is
         // complete. The pipeline starts now so the patient never waits on it.
@@ -129,12 +146,27 @@ export class CallSession {
 
     agent.on('transcript', (role, text) => {
       logger.info({ callId: this.callId, role, text }, 'call.transcript');
+      if (role === 'user') {
+        this.followFlow(this.machine?.onUserTurn());
+      }
     });
 
     agent.on('error', () => void this.end('agent-error'));
     agent.on('close', () => void this.end('agent-close'));
 
     agent.connect();
+  }
+
+  /**
+   * State mode only: push the next node's instruction to the live agent. The
+   * compact nudge — not the full prompt — because Deepgram truncates long
+   * UpdatePrompt payloads, and a truncated instruction mid-call is worse than
+   * a short one.
+   */
+  private followFlow(view?: StateModeView): void {
+    if (!view || !this.agent) return;
+    this.agent.updatePrompt(view.nudge);
+    logger.info({ callId: this.callId, node: view.nodeId }, 'flow.advance');
   }
 
   private sendToTwilio(chunk: Buffer): void {

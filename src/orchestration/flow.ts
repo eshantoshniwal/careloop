@@ -30,6 +30,13 @@ export interface FlowNode {
   next?: string;
   /** Node to visit for an off-script question, returning here afterwards. */
   detour?: string;
+  /**
+   * One-line imperative delivered inside the tool result that advanced onto
+   * this node. UpdatePrompt lands one turn late — the model has usually begun
+   * generating by the time the nudge arrives — so the cue rides the
+   * FunctionCallResponse, which the model always reads before speaking.
+   */
+  cue?: string;
   meta?: Record<string, string | number>;
 }
 
@@ -62,7 +69,7 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   nodes.push({
     id: 'greeting',
     kind: 'greeting',
-    say: "Your opening line already (1) asked if this is {{firstName}}, (2) said who you are — Maya from their care team — and (3) explained the purpose: a quick pre-visit check-in to help their doctor prepare their care plan. Do NOT repeat any of that. Just respond to what they say: if they confirm they are {{firstName}} and are happy to continue, move straight on to verifying their date of birth. If it is a bad time, offer to call back and end warmly. If they say it is not {{firstName}} or a wrong number, apologize briefly and end without sharing any details.",
+    say: "Your opening line already (1) asked if this is {{firstName}}, (2) said who you are — Maya from their care team — and (3) explained the purpose: a quick pre-visit check-in to help their doctor prepare their care plan. Do NOT repeat any of that. Just respond to what they say: if they confirm they are {{firstName}} and are happy to continue, do NOT ask any health or symptom questions — go straight to asking them to tell you their date of birth so you can verify their identity. If it is a bad time, offer to call back and end warmly. If they say it is not {{firstName}} or a wrong number, apologize briefly and end without sharing any details.",
     tools: [],
     next: 'verify',
   });
@@ -78,16 +85,19 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   for (const [index, item] of module.instrument.items.entries()) {
     const isFirst = index === 0;
     const intro = isFirst
-      ? `This is the first of ${module.instrument.items.length} quick rating questions. Once, and only here, tell the patient briefly that for these you'll ask them to answer with a number from ${item.min} to ${item.max}. Then ask: `
+      ? 'Transition in one short sentence: you have a few quick questions about how the past four weeks have been. Then ask: '
       : 'Ask: ';
     const say =
-      `${intro}"${item.prompt}" In the SAME sentence, weave in the two ends naturally (${item.scaleHint}) — one short sentence, not a separate recital. ` +
-      `Do NOT say phrases like "on a scale from ${item.min} to ${item.max}" or "using the same scale" again — you already framed it; just ask the question with its two ends. ` +
-      `After they answer, call chartLive with linkId "${item.linkId}" and the number ${item.min}-${item.max}. If they describe rather than give a number (e.g. "not at all", "all the time"), map it to the closest number and briefly confirm what you recorded. Only restate the two ends if their answer is not clearly one of the numbers.`;
+      `${intro}"${item.prompt}" Keep this question's exact meaning and time frame — you may soften the wording, but NEVER substitute a different question of your own, and ask NOTHING else in this step: no lead-in questions, no extra questions, no "anything changed recently?". This exact question, once. ` +
+      `Let them answer in their own words — do NOT mention numbers, scales, or ratings, and do NOT ask them to rate anything. ` +
+      `You score the answer silently: on this item, ${item.scaleHint}. Map what they said to the closest number and call chartLive with linkId "${item.linkId}" and that number (${item.min}-${item.max}) — only for an answer to THIS question, never for small talk or an answer to something else. ` +
+      `Do NOT repeat or read their answer back, do NOT say the number, and do NOT announce that you are noting or recording anything. React with ONE brief, warm acknowledgement that fits what they said ("that sounds rough", "glad to hear it") — vary it every time — then move on. ` +
+      `If the answer is too vague to place (just "sometimes" or "you know"), ask one short follow-up that offers the two ends as phrases, not numbers. If they volunteer a number themselves, accept it without comment.`;
     nodes.push({
       id: `item:${item.linkId}`,
       kind: 'instrument-item',
       say,
+      cue: `Now ask exactly: "${item.prompt}" Let them answer in their own words — do not mention numbers or scales.`,
       tools: ['chartLive', ...QA_TOOLS],
       next: itemIds[index + 1] ?? afterItems,
       meta: { linkId: item.linkId, min: item.min, max: item.max },
@@ -98,7 +108,10 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
     nodes.push({
       id: `risk:${question.linkId}`,
       kind: 'risk-question',
-      say: `Ask gently: "${question.prompt}" Record the answer with chartRiskAnswer using linkId "${question.linkId}". If the patient declines, accept that and move on.`,
+      say:
+        `Ask gently: "${question.prompt}" Ask exactly this question — do not substitute your own version and do not add extra questions. ` +
+        `Record the answer with chartRiskAnswer using linkId "${question.linkId}". Wait for their actual answer — NEVER chart a filler acknowledgement like "alright" or "okay". If the patient declines, accept that and move on.`,
+      cue: `Now ask exactly: "${question.prompt}" Wait for their actual answer — never chart filler words like "alright".`,
       tools: ['chartRiskAnswer', ...QA_TOOLS],
       next: riskIds[index + 1] ?? afterRisks,
       meta: { linkId: question.linkId, expects: question.expects },
@@ -108,7 +121,8 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   nodes.push({
     id: 'concerns',
     kind: 'open-concerns',
-    say: 'Ask what else has been on their mind about their {{conditionLower}}. Record each distinct thing with recordConcern. Answer clinical questions with getCareContext and cost or coverage questions with checkCoverage.',
+    say: 'Ask what else has been on their mind about their {{conditionLower}}. Record each distinct thing with recordConcern. Answer clinical questions with getCareContext and cost or coverage questions with checkCoverage. When they have nothing more to raise, do not stop or wrap up — move straight into a warm recap of the one or two most important things they told you.',
+    cue: 'Now ask what else has been on their mind about their {{conditionLower}} — record each concern with recordConcern.',
     tools: QA_TOOLS,
     next: 'recap',
   });
@@ -116,7 +130,8 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   nodes.push({
     id: 'recap',
     kind: 'recap',
-    say: 'Reflect back the one or two most important things they told you, in your own words, so they know they were heard. Offer one grounded, non-prescriptive tip from getCareContext if it fits. Say a clinician will review everything and be in touch. Do not state a score, a band, a medication, or a plan.',
+    say: 'Reflect back the one or two most important things they told you, in your own words, so they know they were heard. Offer one grounded, non-prescriptive tip from getCareContext if it fits. Say a clinician will review everything and be in touch. Then ask if there is anything they would like to ask before you finish, and WAIT — answer questions with getCareContext or checkCoverage. Do not state a score, a band, a medication, or a plan. Once they confirm they have no more questions, call submitQuestionnaire silently and say a warm goodbye.',
+    cue: 'Now reflect back the one or two most important things they told you, say a clinician will review everything, then ask if they have any questions before you finish and WAIT.',
     tools: QA_TOOLS,
     next: 'close',
   });
@@ -124,7 +139,8 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   nodes.push({
     id: 'close',
     kind: 'close',
-    say: 'Call submitQuestionnaire exactly once, then thank them warmly and say goodbye.',
+    say: "You MUST actually invoke the submitQuestionnaire tool now, exactly once — saying you submitted without calling it loses the patient's answers. Call it SILENTLY: do not announce it or say \"one moment\". The instant it returns, thank them warmly and say goodbye.",
+    cue: 'Now call submitQuestionnaire silently, then thank them warmly and say goodbye.',
     tools: ['submitQuestionnaire'],
   });
 

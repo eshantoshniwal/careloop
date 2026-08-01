@@ -85,7 +85,7 @@ describe('submitQuestionnaire', () => {
   it('builds a completed response with answers, risks and concerns', async () => {
     const s = state();
     await dispatchTool({ state: s, toolCallId: '1', name: 'chartLive', args: { linkId: 'act-1', value: 3 } });
-    await dispatchTool({ state: s, toolCallId: '2', name: 'chartRiskAnswer', args: { linkId: 'risk-adherence-gap', value: 'yes' } });
+    await dispatchTool({ state: s, toolCallId: '2', name: 'chartRiskAnswer', args: { linkId: 'risk-hospitalisation', value: 'yes' } });
     await dispatchTool({ state: s, toolCallId: '3', name: 'recordConcern', args: { text: 'breathless on stairs' } });
     await dispatchTool({ state: s, toolCallId: '4', name: 'submitQuestionnaire', args: {} });
 
@@ -93,7 +93,7 @@ describe('submitQuestionnaire', () => {
     expect(s.questionnaireResponse?.status).toBe('completed');
     const linkIds = (s.questionnaireResponse?.item ?? []).map((i) => i.linkId);
     expect(linkIds).toContain('act-1');
-    expect(linkIds).toContain('risk-adherence-gap');
+    expect(linkIds).toContain('risk-hospitalisation');
     expect(linkIds).toContain('concern-1');
   });
 
@@ -151,12 +151,12 @@ describe('toCallOutcome', () => {
   it('captures everything the post-call pipeline needs', async () => {
     const s = state();
     await dispatchTool({ state: s, toolCallId: '1', name: 'chartLive', args: { linkId: 'act-1', value: 3 } });
-    await dispatchTool({ state: s, toolCallId: '2', name: 'chartRiskAnswer', args: { linkId: 'risk-smoke-exposure', value: 'no' } });
+    await dispatchTool({ state: s, toolCallId: '2', name: 'chartRiskAnswer', args: { linkId: 'risk-hospitalisation', value: 'no' } });
 
     const outcome = toCallOutcome(s);
     expect(outcome.patientId).toBe('p1');
     expect(outcome.moduleId).toBe('asthma');
     expect(outcome.answers).toEqual([{ linkId: 'act-1', value: 3 }]);
-    expect(outcome.riskAnswers).toEqual([{ linkId: 'risk-smoke-exposure', value: 'no' }]);
+    expect(outcome.riskAnswers).toEqual([{ linkId: 'risk-hospitalisation', value: 'no' }]);
   });
 });

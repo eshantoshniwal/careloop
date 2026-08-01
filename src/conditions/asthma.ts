@@ -145,7 +145,8 @@ export const asthmaModule: ConditionModule = {
           'In the past 4 weeks, how much of the time did your asthma keep you from getting as much done at work, school or at home?',
         min: 1,
         max: 5,
-        scaleHint: '1 means all of the time, 5 means none of the time',
+        scaleHint:
+          '1 = all of the time, 2 = most of the time, 3 = some of the time, 4 = a little of the time, 5 = none of the time',
       },
       {
         linkId: 'act-2',
@@ -153,7 +154,8 @@ export const asthmaModule: ConditionModule = {
         prompt: 'During the past 4 weeks, how often have you had shortness of breath?',
         min: 1,
         max: 5,
-        scaleHint: '1 means more than once a day, 5 means not at all',
+        scaleHint:
+          '1 = more than once a day, 2 = once a day, 3 = three to six times a week, 4 = once or twice a week, 5 = not at all',
       },
       {
         linkId: 'act-3',
@@ -162,7 +164,8 @@ export const asthmaModule: ConditionModule = {
           'During the past 4 weeks, how often did your asthma symptoms wake you up at night or earlier than usual in the morning?',
         min: 1,
         max: 5,
-        scaleHint: '1 means four or more nights a week, 5 means not at all',
+        scaleHint:
+          '1 = four or more nights a week, 2 = two or three nights a week, 3 = once a week, 4 = once or twice in the four weeks, 5 = not at all',
       },
       {
         linkId: 'act-4',
@@ -171,7 +174,8 @@ export const asthmaModule: ConditionModule = {
           'During the past 4 weeks, how often have you used your rescue inhaler or nebulizer medication?',
         min: 1,
         max: 5,
-        scaleHint: '1 means three or more times per day, 5 means not at all',
+        scaleHint:
+          '1 = three or more times per day, 2 = one or two times per day, 3 = two or three times per week, 4 = once a week or less, 5 = not at all',
       },
       {
         linkId: 'act-5',
@@ -179,7 +183,8 @@ export const asthmaModule: ConditionModule = {
         prompt: 'How would you rate your asthma control during the past 4 weeks?',
         min: 1,
         max: 5,
-        scaleHint: '1 means not controlled at all, 5 means completely controlled',
+        scaleHint:
+          '1 = not controlled at all, 2 = poorly controlled, 3 = somewhat controlled, 4 = well controlled, 5 = completely controlled',
       },
     ],
   },
@@ -208,16 +213,10 @@ export const asthmaModule: ConditionModule = {
       prompt: 'Have you ever been admitted to hospital or intensive care because of your asthma?',
       expects: 'yes-no',
     },
-    {
-      linkId: 'risk-adherence-gap',
-      prompt: 'In an average week, are there days you miss your preventer inhaler?',
-      expects: 'yes-no',
-    },
-    {
-      linkId: 'risk-smoke-exposure',
-      prompt: 'Are you around tobacco smoke or vaping regularly, either your own or someone else’s?',
-      expects: 'yes-no',
-    },
+    // Adherence-gap and smoke-exposure questions were cut to keep the call
+    // short: three critical-severity predictors are worth the phone time, the
+    // two warning-level ones were not. Their riskRules remain and simply never
+    // fire without an answer.
   ],
 
   steps: {
@@ -268,8 +267,7 @@ export const asthmaModule: ConditionModule = {
   },
 
   emergencyRules: [
-    'If the patient describes severe breathlessness right now, difficulty speaking in full sentences, blue lips, or a reliever inhaler that is not working, stop the questionnaire immediately, tell them to use their reliever and call emergency services (911 in the US, 999 in the UK), and end the call.',
-    'If the patient describes chest pain with breathlessness, treat it as an emergency and direct them to emergency services rather than continuing the check-in.',
+    'Red flags of a severe attack happening NOW: can only speak a few words at a time, breathless at rest, reliever not helping or needed every 1-2 hours, chest pain with breathlessness, blue lips or fingertips, drowsiness or confusion. If you hear any of these, stop the questionnaire and say ONCE: "This sounds like it could be an emergency. Please hang up, use your reliever, and call 911 right now." Then end the call — do not continue the questions.',
   ],
 
   riskRules: asthmaRiskRules,

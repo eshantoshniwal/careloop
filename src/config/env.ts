@@ -15,10 +15,11 @@ export const env = {
   publicHost: str('PUBLIC_HOST'),
   logLevel: str('LOG_LEVEL', 'info'),
   /**
-   * `prompt` flattens the flow into one system prompt with every tool
-   * available; `state` walks node by node with gated tools. Prompt is the live
-   * default because voice-agent providers generally cannot change a tool set
-   * mid-call — see `src/orchestration/renderers.ts`.
+   * `prompt` flattens the flow into one system prompt; `state` walks node by
+   * node, with the bridge advancing the interview and re-prompting the agent
+   * via Deepgram's UpdatePrompt (see `src/orchestration/statemachine.ts`).
+   * Deepgram fixes the function list at Settings time, so both modes declare
+   * every tool upfront; state mode gates them through the per-node prompt.
    */
   orchMode: (str('ORCH_MODE', 'prompt') === 'state' ? 'state' : 'prompt') as 'prompt' | 'state',
   toolSharedSecret: str('TOOL_SHARED_SECRET', 'dev-secret'),

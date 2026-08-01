@@ -184,6 +184,9 @@ export class DeepgramAgent extends EventEmitter {
       case 'SettingsApplied':
         logger.info({ functions: this.settings.functions.length }, 'deepgram.settings.applied');
         break;
+      case 'PromptUpdated':
+        logger.info('deepgram.prompt.updated');
+        break;
       case 'Warning':
         logger.warn({ description: message.description }, 'deepgram.agent.warning');
         break;
@@ -196,6 +199,19 @@ export class DeepgramAgent extends EventEmitter {
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(chunk, { binary: true });
     }
+  }
+
+  /**
+   * Append to the running system prompt mid-call (state mode advances the
+   * flow with this). Per Deepgram docs, UpdatePrompt ADDS to — not replaces —
+   * the current prompt, capped at 25,000 characters on managed LLMs, and it
+   * carries ONLY the prompt: the function list is fixed at Settings time,
+   * which is why every mode declares all tools upfront and gates them through
+   * the prompt text instead. Keep payloads small; the cap is cumulative.
+   */
+  updatePrompt(prompt: string): void {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify({ type: 'UpdatePrompt', prompt }));
   }
 
   respondToFunctionCall(id: string, name: string, content: unknown): void {

@@ -236,17 +236,30 @@ export function useLiveFeed(patientId: string | undefined, intervalMs = 3000): {
 
     async function poll(): Promise<void> {
       try {
+        // Sort by _lastUpdated (always server-set) — NOT `sent`, which is
+        // absent on legacy artifact rows; those sort first under `-sent` and
+        // saturate the _count window, hiding the just-written chart lines.
+        // `cache: 'reload'` bypasses the client's 10s GET cache, which would
+        // otherwise swallow most polls at this interval.
         const [obs, comms] = await Promise.all([
-          medplum.searchResources('Observation', {
-            subject: `Patient/${patientId}`,
-            _sort: '-_lastUpdated',
-            _count: '40',
-          }),
-          medplum.searchResources('Communication', {
-            subject: `Patient/${patientId}`,
-            _sort: '-sent',
-            _count: '60',
-          }),
+          medplum.searchResources(
+            'Observation',
+            {
+              subject: `Patient/${patientId}`,
+              _sort: '-_lastUpdated',
+              _count: '40',
+            },
+            { cache: 'reload' },
+          ),
+          medplum.searchResources(
+            'Communication',
+            {
+              subject: `Patient/${patientId}`,
+              _sort: '-_lastUpdated',
+              _count: '60',
+            },
+            { cache: 'reload' },
+          ),
         ]);
         if (cancelled) return;
 
@@ -264,8 +277,10 @@ export function useLiveFeed(patientId: string | undefined, intervalMs = 3000): {
         // makes the indicator honest rather than decorative.
         const newest = Math.max(
           0,
-          ...chart.map((c) => new Date(c.sent ?? 0).getTime()),
-          ...obs.map((o) => new Date(o.effectiveDateTime ?? o.issued ?? 0).getTime()),
+          ...chart.map((c) => new Date(c.sent ?? c.meta?.lastUpdated ?? 0).getTime()),
+          ...obs.map((o) =>
+            new Date(o.effectiveDateTime ?? o.issued ?? o.meta?.lastUpdated ?? 0).getTime(),
+          ),
         );
         lastSeen.current = newest;
         setLive(Date.now() - newest < 30_000);

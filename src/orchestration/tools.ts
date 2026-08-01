@@ -155,7 +155,7 @@ async function chartLive(state: CallState, args: Record<string, unknown>): Promi
 
   const raw = Number(args.value);
   if (!Number.isFinite(raw)) {
-    return { say: 'That answer was not a number. Ask the patient to pick a number on the scale.' };
+    return { say: "That answer was not a number. Map the patient's words to the closest number on the item's scale yourself and call chartLive again — do not ask the patient for a number." };
   }
   const value = Math.min(Math.max(Math.round(raw), item.min), item.max);
   state.answers.set(linkId, value);
@@ -187,10 +187,12 @@ async function chartLive(state: CallState, args: Record<string, unknown>): Promi
 
   const remaining = module.instrument.items.filter((i) => !state.answers.has(i.linkId));
   return {
+    // Never imply the call is winding down: "that was the last item" made the
+    // agent announce completion mid-call while risk questions still remained.
     say:
       remaining.length > 0
         ? `Recorded. ${remaining.length} question${remaining.length === 1 ? '' : 's'} left.`
-        : 'Recorded. That was the last questionnaire item.',
+        : 'Recorded. The rating questions are done, but the check-in is NOT over — continue with the next step.',
     detail: { linkId, value, remaining: remaining.length },
   };
 }
@@ -408,7 +410,10 @@ async function verifyIdentity(state: CallState, args: Record<string, unknown>): 
   if (matched) {
     state.dobVerified = true;
     return {
-      say: 'That matches our records. Thank them briefly and move on to the first question.',
+      // "Move on to the first question" invited the model to invent one while
+      // the next node's prompt was still in flight — the cue appended to this
+      // result names the actual question, so say only what is safe now.
+      say: 'That matches our records. Thank them briefly, then continue exactly as instructed next.',
       detail: { verified: true, attempts: state.dobAttempts },
     };
   }
