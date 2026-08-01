@@ -9,7 +9,13 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region              = var.region
+  profile             = var.aws_profile
+  allowed_account_ids = [var.target_account_id]
+
+  assume_role {
+    role_arn = "arn:aws:iam::${var.target_account_id}:role/${var.assume_role_name}"
+  }
 }
 
 # --- Networking -------------------------------------------------------------
@@ -147,11 +153,15 @@ resource "aws_instance" "bridge" {
   iam_instance_profile   = aws_iam_instance_profile.bridge.name
 
   user_data = templatefile("${path.module}/user-data.sh", {
-    public_host        = var.public_host
+    public_host        = var.domain
     env_parameter_name = var.env_parameter_name
     region             = var.region
-    repo_url           = var.repo_url
+    repo_url           = var.git_repo
   })
+
+  # A user-data edit must re-bootstrap: without this Terraform updates the
+  # attribute in place and cloud-init never re-runs, leaving stale code live.
+  user_data_replace_on_change = true
 
   root_block_device {
     volume_size = 20

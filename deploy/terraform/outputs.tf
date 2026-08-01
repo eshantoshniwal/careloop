@@ -15,5 +15,5 @@ output "env_parameter_name" {
 
 output "voice_webhook_url" {
   description = "Twilio voice webhook once DNS and TLS are live."
-  value       = "https://${var.public_host}/voice"
+  value       = "https://${var.domain}/voice"
 }
