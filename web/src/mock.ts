@@ -119,6 +119,10 @@ const resources: any[] = [
   itemObs('i4', M, '82671-7', 2),
   itemObs('i5', M, '82672-5', 1),
 
+  // Eshan and Saket deliberately share a score, to exercise the collision case
+  scoreObs('e1', 'p-eshan', 17, 0, 'Not well controlled'),
+  scoreObs('s1', 'p-saket', 17, 0, 'Not well controlled'),
+
   // Maria review artifacts
   comm('c-safety', M, 'careloop-safety',
     '[critical] reliever-overuse: Reports 5+ reliever canisters in 12 months — associated with increased mortality and inadequate controller therapy.\n[warning] smoke-exposure: Ongoing smoke exposure reduces inhaled corticosteroid responsiveness.', 21 * H, 'Safety and risk findings'),

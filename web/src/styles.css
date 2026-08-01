@@ -754,6 +754,14 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
   cursor: default;
 }
 .qi-dot.active { width: 14px; height: 14px; z-index: 3; }
+/* Several patients on one score: a single marker that says how many, rather
+   than identical dots hiding each other. */
+.qi-dot.multi {
+  width: 18px; height: 18px; background: var(--brand); border-color: var(--surface);
+  display: grid; place-items: center;
+}
+.qi-dot-n { font-size: 10.5px; font-weight: 800; color: #fff; line-height: 1; }
+.qi-tip-names { display: block; margin-top: 3px; opacity: 0.85; font-weight: 500; white-space: normal; max-width: 260px; }
 /* Sits above the track, so it never covers the band legend below it. */
 .qi-tip {
   position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%);

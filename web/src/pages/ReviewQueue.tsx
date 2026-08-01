@@ -52,6 +52,21 @@ function flagIcon(code: string): JSX.Element {
 
 type Sort = 'urgent' | 'newest' | 'oldest';
 
+/** Patients sharing a score collapse to one marker, ascending by score. */
+function groupByScore(
+  patients: Array<{ name: string; total: number }>,
+): Array<{ total: number; names: string[] }> {
+  const byTotal = new Map<number, string[]>();
+  for (const p of patients) {
+    const names = byTotal.get(p.total) ?? [];
+    names.push(p.name);
+    byTotal.set(p.total, names);
+  }
+  return [...byTotal.entries()]
+    .map(([total, names]) => ({ total, names }))
+    .sort((a, b) => a.total - b.total);
+}
+
 /**
  * The review queue as a triage board.
  *
@@ -73,7 +88,9 @@ export function ReviewQueuePage({
 }): JSX.Element {
   const { rows } = usePlanQueue(plans);
   const [filter, setFilter] = useState<'all' | TriageLevel>('all');
-  const [sort, setSort] = useState<Sort>('urgent');
+  // Newest first by default: the plan that just landed is the one a clinician
+  // is usually looking for. Urgency ordering is one click away.
+  const [sort, setSort] = useState<Sort>('newest');
   const [preview, setPreview] = useState<EnrichedPlan>();
   const [hoveredDot, setHoveredDot] = useState<string>();
   const [insightsOpen, setInsightsOpen] = useState(false);
@@ -155,7 +172,7 @@ export function ReviewQueuePage({
           <h1>Review queue</h1>
           <p className="sub">
             {rows.length} voice-charted draft plan{rows.length === 1 ? '' : 's'} ready for clinician
-            sign-off — sorted by who needs you most.
+            sign-off.
             {orphaned > 0 && (
               <>
                 {' '}
@@ -202,22 +219,27 @@ export function ReviewQueuePage({
                       style={{ width: `${((b.max - b.min + 1) / (span + 1)) * 100}%`, background: toneVars(b.tone).bg }}
                     />
                   ))}
-                  {patients.map((p, i) => {
-                    const key = `${scale.instrument}-${p.name}-${i}`;
-                    const pct = ((p.total - scale.min) / span) * 100;
+                  {/* Patients on the same score sit at the same point, so they
+                      are drawn as one marker carrying the count — stacking them
+                      invisibly hid everyone but the last. */}
+                  {groupByScore(patients).map(({ total, names }) => {
+                    const key = `${scale.instrument}-${total}`;
+                    const pct = ((total - scale.min) / span) * 100;
+                    const band = bandForScore(scale, total);
                     return (
                       <span
                         key={key}
-                        className={`qi-dot${hoveredDot === key ? ' active' : ''}`}
+                        className={`qi-dot${hoveredDot === key ? ' active' : ''}${names.length > 1 ? ' multi' : ''}`}
                         style={{ left: `${pct}%` }}
                         tabIndex={0}
                         role="img"
-                        aria-label={`${p.name}: ${scale.instrument} ${p.total} — ${bandForScore(scale, p.total).label}`}
+                        aria-label={`${scale.instrument} ${total} — ${band.label}: ${names.join(', ')}`}
                         onMouseEnter={() => setHoveredDot(key)}
                         onMouseLeave={() => setHoveredDot((c) => (c === key ? undefined : c))}
                         onFocus={() => setHoveredDot(key)}
                         onBlur={() => setHoveredDot((c) => (c === key ? undefined : c))}
                       >
+                        {names.length > 1 && <span className="qi-dot-n">{names.length}</span>}
                         {hoveredDot === key && (
                           // Anchored above the track so it never covers the legend
                           // underneath, and flipped inward at the extremes.
@@ -225,8 +247,9 @@ export function ReviewQueuePage({
                             className="qi-tip"
                             style={pct > 70 ? { right: 0, transform: 'none' } : pct < 30 ? { left: 0, transform: 'none' } : undefined}
                           >
-                            <strong>{p.name}</strong>
-                            {` · ${scale.instrument} ${p.total} — ${bandForScore(scale, p.total).label}`}
+                            <strong>{scale.instrument} {total}</strong>
+                            {` — ${band.label}`}
+                            <span className="qi-tip-names">{names.join(', ')}</span>
                           </span>
                         )}
                       </span>
@@ -284,8 +307,8 @@ export function ReviewQueuePage({
         <label className="sort-field">
           <span className="small muted">Sort</span>
           <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort the queue">
-            <option value="urgent">Most urgent first</option>
             <option value="newest">Newest first</option>
+            <option value="urgent">Most urgent first</option>
             <option value="oldest">Oldest first</option>
           </select>
         </label>
