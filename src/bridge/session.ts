@@ -101,6 +101,9 @@ export class CallSession {
 
     agent.on('functionCall', (call) => {
       void (async () => {
+        // Logged at info: during a live call this is the only visibility into
+        // whether the agent is actually driving the flow or just talking.
+        logger.info({ callId: this.callId, tool: call.name, args: call.args }, 'call.tool.requested');
         const result = await dispatchTool({
           state: this.state,
           toolCallId: call.id,
@@ -118,7 +121,7 @@ export class CallSession {
     });
 
     agent.on('transcript', (role, text) => {
-      logger.debug({ callId: this.callId, role, chars: text.length }, 'call.transcript');
+      logger.info({ callId: this.callId, role, text }, 'call.transcript');
     });
 
     agent.on('error', () => void this.end('agent-error'));

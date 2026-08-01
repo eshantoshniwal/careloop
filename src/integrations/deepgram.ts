@@ -181,6 +181,12 @@ export class DeepgramAgent extends EventEmitter {
       case 'Error':
         logger.error({ description: message.description }, 'deepgram.agent.reported-error');
         break;
+      case 'SettingsApplied':
+        logger.info({ functions: this.settings.functions.length }, 'deepgram.settings.applied');
+        break;
+      case 'Warning':
+        logger.warn({ description: message.description }, 'deepgram.agent.warning');
+        break;
       default:
         logger.debug({ type: message.type }, 'deepgram.message');
     }

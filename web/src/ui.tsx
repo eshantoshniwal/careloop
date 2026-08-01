@@ -1,0 +1,159 @@
+import type { ReactNode } from 'react';
+
+/** Small presentational primitives shared across pages. */
+
+export type Tone = 'critical' | 'urgent' | 'routine' | 'ok' | 'info' | 'brand';
+
+export function Badge({ tone, children }: { tone: Tone | 'live'; children?: ReactNode }): JSX.Element {
+  return <span className={`badge ${tone}`}>{children}</span>;
+}
+
+/**
+ * Deterministic avatar colour from the name, so the same patient keeps the
+ * same colour across every screen. Hues avoid the red/amber band reserved for
+ * severity — a patient must never look urgent because of their initials.
+ */
+const AVATAR_HUES = [212, 258, 288, 172, 152, 198, 320];
+
+export function Avatar({ name, small }: { name: string; small?: boolean }): JSX.Element {
+  const initials =
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || '?';
+
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  const hue = AVATAR_HUES[hash % AVATAR_HUES.length] ?? 212;
+
+  return (
+    <span
+      className={`avatar${small ? ' sm' : ''}`}
+      style={{ background: `hsl(${hue} 70% 94%)`, color: `hsl(${hue} 55% 34%)` }}
+      aria-hidden
+    >
+      {initials}
+    </span>
+  );
+}
+
+export function Card({
+  title,
+  subtitle,
+  action,
+  children,
+  padded,
+}: {
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  action?: ReactNode;
+  children?: ReactNode;
+  padded?: boolean;
+}): JSX.Element {
+  return (
+    <section className="card">
+      {title && (
+        <header className="card-head">
+          <div>
+            <h2>{title}</h2>
+            {subtitle && <p className="sub">{subtitle}</p>}
+          </div>
+          <div className="spacer" />
+          {action}
+        </header>
+      )}
+      {padded ? <div className="card-pad">{children}</div> : children}
+    </section>
+  );
+}
+
+export function Stat({
+  icon,
+  value,
+  label,
+  sub,
+  tone = 'brand',
+}: {
+  icon: ReactNode;
+  value: ReactNode;
+  label: string;
+  sub?: string;
+  tone?: Tone;
+}): JSX.Element {
+  const bg: Record<Tone, string> = {
+    critical: 'var(--critical-bg)',
+    urgent: 'var(--urgent-bg)',
+    routine: 'var(--surface-2)',
+    ok: 'var(--ok-bg)',
+    info: 'var(--info-bg)',
+    brand: 'var(--brand-bg)',
+  };
+  const fg: Record<Tone, string> = {
+    critical: 'var(--critical)',
+    urgent: 'var(--urgent)',
+    routine: 'var(--ink-2)',
+    ok: 'var(--ok)',
+    info: 'var(--info)',
+    brand: 'var(--brand)',
+  };
+  return (
+    <section className="card card-pad">
+      <div className="stat-icon" style={{ background: bg[tone], color: fg[tone] }}>
+        {icon}
+      </div>
+      <div className="stat-value">{value}</div>
+      <div className="stat-label">{label}</div>
+      {sub && <div className="stat-sub">{sub}</div>}
+    </section>
+  );
+}
+
+export function Empty({ children }: { children: ReactNode }): JSX.Element {
+  return <p className="empty">{children}</p>;
+}
+
+export function relativeTime(iso: string | undefined): string {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '—';
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+export function clockTime(iso: string | undefined): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// --------------------------------------------------------------- icons
+
+const S = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+
+export const Icon = {
+  pulse: (p = S) => (<svg {...p}><path d="M3 12h4l3 8 4-16 3 8h4" /></svg>),
+  home: (p = S) => (<svg {...p}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /></svg>),
+  live: (p = S) => (<svg {...p}><circle cx="12" cy="12" r="2.5" /><path d="M7.5 7.5a6.4 6.4 0 0 0 0 9M16.5 16.5a6.4 6.4 0 0 0 0-9" /><path d="M4.5 4.5a10.6 10.6 0 0 0 0 15M19.5 19.5a10.6 10.6 0 0 0 0-15" /></svg>),
+  list: (p = S) => (<svg {...p}><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01" /></svg>),
+  phone: (p = S) => (<svg {...p}><path d="M5 3h3.5l1.8 4.5-2.2 1.3a12.5 12.5 0 0 0 6.1 6.1l1.3-2.2L20 14.5V18a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 4 6.2 2 2 0 0 1 6 4z" /></svg>),
+  users: (p = S) => (<svg {...p}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M16 5.2a3.2 3.2 0 0 1 0 5.6M17.5 14.6A5.5 5.5 0 0 1 20.5 20" /></svg>),
+  plus: (p = S) => (<svg {...p}><path d="M12 5v14M5 12h14" /></svg>),
+  clipboard: (p = S) => (<svg {...p}><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1" /><path d="M9 10h6M9 14h4" /></svg>),
+  shield: (p = S) => (<svg {...p}><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z" /></svg>),
+  inbox: (p = S) => (<svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 13h5l1.5 2.5h5L16 13h5" /></svg>),
+  chevron: (p = { ...S, width: 16, height: 16 }) => (<svg {...p}><path d="m9 6 6 6-6 6" /></svg>),
+  arrowRight: (p = { ...S, width: 16, height: 16 }) => (<svg {...p}><path d="M5 12h14M13 6l6 6-6 6" /></svg>),
+  logout: (p = { ...S, width: 17, height: 17 }) => (<svg {...p}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 12H3M6 8l-3 4 3 4" /></svg>),
+  check: (p = { ...S, width: 15, height: 15 }) => (<svg {...p}><path d="M20 6 9 17l-5-5" /></svg>),
+  trend: (p = S) => (<svg {...p}><path d="M3 17l5-6 4 3 6-8" /><path d="M15 6h4v4" /></svg>),
+};

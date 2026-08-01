@@ -41,6 +41,8 @@ export interface ModuleSummary {
   display: string;
   instrument: string;
   items: number;
+  icd10?: string;
+  riskQuestions?: number;
 }
 
 export const getModules = () => request<ModuleSummary[]>('/modules');
