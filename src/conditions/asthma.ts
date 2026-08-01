@@ -1,3 +1,4 @@
+import { isAffirmative, parseCount } from '../orchestration/numbers.js';
 import type { InstrumentAnswer, ProtocolStep, RiskAnswer, RiskFinding, ScoreResult } from '../types.js';
 import type { ConditionModule } from './types.js';
 
@@ -59,11 +60,11 @@ const ORAL_STEROID: ProtocolStep['medications'][number] = {
 
 function asthmaRiskRules(answers: RiskAnswer[], score: ScoreResult): RiskFinding[] {
   const findings: RiskFinding[] = [];
-  const get = (linkId: string) => answers.find((a) => a.linkId === linkId)?.value.toLowerCase() ?? '';
-  const isYes = (value: string) => /\b(yes|yeah|yep|correct|true)\b/.test(value);
+  const get = (linkId: string) => answers.find((a) => a.linkId === linkId)?.value ?? '';
+  const isYes = isAffirmative;
 
-  const exacerbations = get('risk-exacerbations');
-  const exacerbationCount = Number(exacerbations.match(/\d+/)?.[0] ?? '0');
+  // Answers arrive as speech, so "twice" and "about four" have to count.
+  const exacerbationCount = parseCount(get('risk-exacerbations')) ?? 0;
   if (exacerbationCount >= 2) {
     findings.push({
       severity: 'critical',
@@ -78,8 +79,7 @@ function asthmaRiskRules(answers: RiskAnswer[], score: ScoreResult): RiskFinding
     });
   }
 
-  const relieverUse = get('risk-reliever-canisters');
-  const canisters = Number(relieverUse.match(/\d+/)?.[0] ?? '0');
+  const canisters = parseCount(get('risk-reliever-canisters')) ?? 0;
   if (canisters >= 3) {
     findings.push({
       severity: 'critical',

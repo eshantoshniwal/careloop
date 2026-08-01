@@ -9,6 +9,7 @@
  *   npm run moss:index asthma     # one module
  */
 
+import './quiet.js';
 import { listModules, tryGetModule } from '../conditions/registry.js';
 import { indexCorpus } from '../integrations/moss.js';
 
@@ -25,7 +26,7 @@ async function main(): Promise<void> {
 
   for (const module of modules) {
     const outcome = await indexCorpus(module.moss);
-    const label = outcome === 'live' ? 'indexed' : 'SKIPPED (no Moss credentials)';
+    const label = outcome === 'skipped' ? 'SKIPPED (no Moss credentials)' : outcome;
     console.log(`${module.moss.indexName.padEnd(28)} ${String(module.moss.corpus.length).padStart(3)} docs — ${label}`);
   }
 

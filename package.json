@@ -18,7 +18,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "web:dev": "npm --prefix web run dev",
-    "web:build": "npm --prefix web run build"
+    "web:build": "npm --prefix web run build",
+    "doctor": "tsx src/scripts/doctor.ts",
+    "demo:history": "tsx src/scripts/demo-history.ts",
+    "demo:call": "tsx src/scripts/demo-call.ts"
   },
   "dependencies": {
     "@medplum/core": "^3.2.9",
@@ -37,5 +40,8 @@
     "tsx": "^4.19.0",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"
+  },
+  "optionalDependencies": {
+    "@moss-dev/moss": "^1.4.1"
   }
 }

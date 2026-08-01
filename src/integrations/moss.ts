@@ -8,7 +8,7 @@ import type { RetrievalSnippet } from '../types.js';
  *
  * It must never receive patient identifiers, transcripts, coverage details or
  * clinical history. Those live in Medplum and are passed directly to the
- * orchestration layer instead. The only thing sent to Moss is the question
+ * orchestration layer instead. The only things sent to Moss are the question
  * text and the static condition corpus.
  */
 
@@ -19,6 +19,25 @@ export interface MossClient {
 interface MossIndexConfig {
   indexName: string;
   corpus: MossCorpusEntry[];
+}
+
+/** Minimal structural view of the bits of `@moss-dev/moss` we depend on. */
+interface MossSdkClient {
+  createIndex(indexName: string, docs: MossDoc[], options?: unknown): Promise<unknown>;
+  addDocs(indexName: string, docs: MossDoc[], options?: { upsert?: boolean }): Promise<unknown>;
+  getIndex(indexName: string): Promise<{ name: string; docCount?: number }>;
+  loadIndex(indexName: string, options?: unknown): Promise<string>;
+  query(
+    indexName: string,
+    query: string,
+    options?: { topK?: number },
+  ): Promise<{ docs?: Array<{ id: string; text: string; score: number; metadata?: Record<string, string> }> }>;
+}
+
+interface MossDoc {
+  id: string;
+  text: string;
+  metadata?: Record<string, string>;
 }
 
 const clients = new Map<string, MossClient>();
@@ -83,35 +102,41 @@ function mockClient(config: MossIndexConfig): MossClient {
  * whole bridge fail to boot on a platform where the binding cannot load, so
  * the import happens on first use and any failure degrades to mock retrieval.
  */
-async function loadMossSdk(): Promise<any | undefined> {
+async function loadMossSdk(): Promise<{ MossClient: new (id: string, key: string) => MossSdkClient } | undefined> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const dynamicImport = new Function('specifier', 'return import(specifier)') as (
       specifier: string,
     ) => Promise<any>;
-    return await dynamicImport('@moss-dev/moss');
+    const sdk = await dynamicImport('@moss-dev/moss');
+    if (!sdk?.MossClient) {
+      logger.warn('moss.sdk.missing-client-export');
+      return undefined;
+    }
+    return sdk;
   } catch (error) {
     logger.warn({ err: String(error) }, 'moss.sdk.unavailable');
     return undefined;
   }
 }
 
+export async function createSdkClient(): Promise<MossSdkClient | undefined> {
+  const sdk = await loadMossSdk();
+  if (!sdk) return undefined;
+  return new sdk.MossClient(env.moss.projectId, env.moss.projectKey);
+}
+
 function liveClient(config: MossIndexConfig): MossClient {
-  let ready: Promise<any | undefined> | undefined;
+  let ready: Promise<MossSdkClient | undefined> | undefined;
   const fallback = mockClient(config);
 
-  async function ensureIndex(): Promise<any | undefined> {
+  async function ensureIndex(): Promise<MossSdkClient | undefined> {
     if (!ready) {
       ready = (async () => {
-        const sdk = await loadMossSdk();
-        if (!sdk) return undefined;
-        const Moss = sdk.Moss ?? sdk.default;
-        const client = new Moss({
-          projectId: env.moss.projectId,
-          projectKey: env.moss.projectKey,
-        });
-        // Load the index once per client. Creating it is idempotent server-side.
-        await client.loadIndex?.(config.indexName);
+        const client = await createSdkClient();
+        if (!client) return undefined;
+        // Loading pulls the index into memory so each query is local rather
+        // than a cloud round-trip on the live call path.
+        await client.loadIndex(config.indexName);
         logger.info({ index: config.indexName }, 'moss.index.loaded');
         return client;
       })().catch((error) => {
@@ -129,15 +154,15 @@ function liveClient(config: MossIndexConfig): MossClient {
       if (!client) return fallback.retrieve(question, options);
       try {
         const response = await client.query(config.indexName, question, { topK: k });
-        const rows: any[] = response?.results ?? response?.matches ?? response ?? [];
-        if (!Array.isArray(rows) || rows.length === 0) {
+        const rows = response?.docs ?? [];
+        if (rows.length === 0) {
           logger.warn({ index: config.indexName }, 'moss.live.empty');
           return fallback.retrieve(question, options);
         }
         return rows.slice(0, k).map((row) => ({
-          text: String(row.text ?? row.content ?? row.document ?? ''),
-          source: String(row.source ?? row.metadata?.source ?? config.indexName),
-          score: Number(row.score ?? row.similarity ?? 0),
+          text: String(row.text ?? ''),
+          source: String(row.metadata?.source ?? config.indexName),
+          score: Number(row.score ?? 0),
           mock: false,
         }));
       } catch (error) {
@@ -159,25 +184,39 @@ export function getMossClient(config: MossIndexConfig): MossClient {
   return client;
 }
 
-/** Used by `npm run moss:index` to push a condition corpus. */
-export async function indexCorpus(config: MossIndexConfig): Promise<'live' | 'skipped'> {
+/**
+ * Used by `npm run moss:index`. Creating an index that already exists throws,
+ * so an existing index is updated in place with an upsert instead.
+ */
+export async function indexCorpus(config: MossIndexConfig): Promise<'created' | 'updated' | 'skipped'> {
   if (!live.moss) {
     logger.warn({ index: config.indexName }, 'moss.index.skipped.no-credentials');
     return 'skipped';
   }
-  const sdk = await loadMossSdk();
-  if (!sdk) return 'skipped';
-  const Moss = sdk.Moss ?? sdk.default;
-  const client = new Moss({ projectId: env.moss.projectId, projectKey: env.moss.projectKey });
-  await client.createIndex?.(config.indexName);
-  for (const entry of config.corpus) {
-    await client.upsert?.(config.indexName, {
-      id: entry.id,
-      text: entry.text,
-      metadata: { source: entry.source },
-    });
+  const client = await createSdkClient();
+  if (!client) return 'skipped';
+
+  const docs: MossDoc[] = config.corpus.map((entry) => ({
+    id: entry.id,
+    text: entry.text,
+    metadata: { source: entry.source },
+  }));
+
+  let exists = false;
+  try {
+    await client.getIndex(config.indexName);
+    exists = true;
+  } catch {
+    exists = false;
   }
-  await client.saveIndex?.(config.indexName);
-  logger.info({ index: config.indexName, documents: config.corpus.length }, 'moss.index.written');
-  return 'live';
+
+  if (exists) {
+    await client.addDocs(config.indexName, docs, { upsert: true });
+    logger.info({ index: config.indexName, documents: docs.length }, 'moss.index.updated');
+    return 'updated';
+  }
+
+  await client.createIndex(config.indexName, docs);
+  logger.info({ index: config.indexName, documents: docs.length }, 'moss.index.created');
+  return 'created';
 }

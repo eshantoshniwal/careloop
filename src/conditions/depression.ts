@@ -1,3 +1,4 @@
+import { isAffirmative } from '../orchestration/numbers.js';
 import type { InstrumentAnswer, MedOrder, RiskAnswer, RiskFinding, ScoreResult } from '../types.js';
 import type { ConditionModule } from './types.js';
 
@@ -27,8 +28,8 @@ const SERTRALINE_25_START: MedOrder = {
 
 function depressionRiskRules(answers: RiskAnswer[], score: ScoreResult): RiskFinding[] {
   const findings: RiskFinding[] = [];
-  const get = (linkId: string) => answers.find((a) => a.linkId === linkId)?.value.toLowerCase() ?? '';
-  const isYes = (value: string) => /\b(yes|yeah|yep|correct|true)\b/.test(value);
+  const get = (linkId: string) => answers.find((a) => a.linkId === linkId)?.value ?? '';
+  const isYes = isAffirmative;
 
   if (isYes(get('risk-prior-attempt'))) {
     findings.push({

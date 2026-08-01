@@ -6,6 +6,7 @@ import type {
   Observation,
   Patient,
 } from '@medplum/fhirtypes';
+import { env } from '../config/env.js';
 import { moduleForCondition, tryGetModule } from '../conditions/registry.js';
 import { readResource, searchResources, usingLiveMedplum } from '../integrations/medplum.js';
 import { logger } from '../logger.js';
@@ -135,15 +136,36 @@ export async function loadPatientContext(input: {
     .filter(Boolean);
 
   const baseCoverage = coverageInfo(coverages[0]);
+
+  // Precedence: explicit override, then the Coverage resource, then the test
+  // subscriber from configuration. The last tier exists because a FHIR Coverage
+  // carries member id but not subscriber name/DOB, and a 270 needs both — see
+  // the note on `env.stedi.subscriber`.
+  const subscriberDefaults = env.stedi.subscriber;
   const coverage: CoverageInfo | undefined =
     baseCoverage || input.coverageOverride
       ? {
           payerId: input.coverageOverride?.payerId ?? baseCoverage?.payerId ?? '',
           payerName: input.coverageOverride?.payerName ?? baseCoverage?.payerName,
-          memberId: input.coverageOverride?.memberId ?? baseCoverage?.memberId ?? '',
-          subscriberFirstName: input.coverageOverride?.subscriberFirstName,
-          subscriberLastName: input.coverageOverride?.subscriberLastName,
-          subscriberDob: input.coverageOverride?.subscriberDob,
+          memberId:
+            input.coverageOverride?.memberId ??
+            baseCoverage?.memberId ??
+            subscriberDefaults.memberId,
+          subscriberFirstName:
+            input.coverageOverride?.subscriberFirstName ||
+            baseCoverage?.subscriberFirstName ||
+            subscriberDefaults.firstName ||
+            undefined,
+          subscriberLastName:
+            input.coverageOverride?.subscriberLastName ||
+            baseCoverage?.subscriberLastName ||
+            subscriberDefaults.lastName ||
+            undefined,
+          subscriberDob:
+            input.coverageOverride?.subscriberDob ||
+            baseCoverage?.subscriberDob ||
+            subscriberDefaults.dob ||
+            undefined,
         }
       : undefined;
 

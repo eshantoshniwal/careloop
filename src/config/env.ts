@@ -53,6 +53,18 @@ export const env = {
     providerNpi: str('STEDI_PROVIDER_NPI'),
     providerName: str('STEDI_PROVIDER_NAME'),
     serviceType: str('STEDI_SERVICE_TYPE', '30'),
+    /**
+     * A FHIR Coverage carries payer and member id but not the subscriber name
+     * and date of birth a complete 270 needs. These fill the gap for test and
+     * demo payers. In production they must come from the Coverage/RelatedPerson
+     * record, never from process configuration.
+     */
+    subscriber: {
+      firstName: str('STEDI_SUB_FIRST_NAME'),
+      lastName: str('STEDI_SUB_LAST_NAME'),
+      dob: str('STEDI_SUB_DOB'),
+      memberId: str('STEDI_SUB_MEMBER_ID'),
+    },
   },
 
   seed: {
