@@ -1,6 +1,6 @@
 import type { Patient } from '@medplum/fhirtypes';
 import { useState } from 'react';
-import { startCall } from '../bridge';
+import { CallDialog, type CallTarget } from '../components/CallDialog';
 import { displayName } from '../data';
 import { Avatar, Badge, Card, Empty, Icon, relativeTime } from '../ui';
 
@@ -12,45 +12,11 @@ export function PatientsPage({
   onOpenLive: (patientId: string) => void;
 }): JSX.Element {
   const [query, setQuery] = useState('');
-  const [dialing, setDialing] = useState<string>();
-  const [message, setMessage] = useState<{ kind: 'ok' | 'error' | 'warn'; text: string }>();
+  const [target, setTarget] = useState<CallTarget>();
 
   const filtered = patients.filter((p) =>
     displayName(p).toLowerCase().includes(query.trim().toLowerCase()),
   );
-
-  /**
-   * Dialling reaches a real person, so it is a deliberate per-row action with
-   * a confirmation rather than something that can happen from a stray click.
-   */
-  async function dial(patient: Patient): Promise<void> {
-    const name = displayName(patient);
-    const phone = patient.telecom?.find((t) => t.system === 'phone')?.value;
-    if (!patient.id || !phone) {
-      setMessage({ kind: 'error', text: `${name} has no phone number on file.` });
-      return;
-    }
-    if (!window.confirm(`Call ${name} on ${phone} now?`)) return;
-
-    setDialing(patient.id);
-    setMessage(undefined);
-    try {
-      const result = await startCall(patient.id);
-      setMessage(
-        result.mock
-          ? { kind: 'warn', text: 'Twilio is in mock mode — no real call was placed.' }
-          : { kind: 'ok', text: `Calling ${name} now.` },
-      );
-      if (!result.mock) onOpenLive(patient.id);
-    } catch (error) {
-      setMessage({
-        kind: 'error',
-        text: error instanceof Error ? error.message : 'Could not start the call.',
-      });
-    } finally {
-      setDialing(undefined);
-    }
-  }
 
   return (
     <>
@@ -70,15 +36,25 @@ export function PatientsPage({
         </div>
       </header>
 
-      {message && (
-        <div className={`notice ${message.kind}`} style={{ marginBottom: 16 }}>
-          {message.text}
-        </div>
+      {target && (
+        <CallDialog
+          target={target}
+          onClose={() => setTarget(undefined)}
+          onStarted={onOpenLive}
+        />
       )}
 
-      <Card title="Directory">
+      <Card title="Directory" subtitle={`${filtered.length} shown`}>
         {filtered.length === 0 ? (
-          <Empty>{query ? 'No patients match that search.' : 'No patients yet.'}</Empty>
+          query ? (
+            <Empty title="No matches">
+              Nothing matches “{query}”. Clear the search to see all {patients.length} patients.
+            </Empty>
+          ) : (
+            <Empty title="No patients yet">
+              Create one from New intake — that also sets up the condition and questionnaire.
+            </Empty>
+          )
         ) : (
           filtered.map((patient) => {
             const name = displayName(patient);
@@ -99,15 +75,15 @@ export function PatientsPage({
                 {!phone && <Badge tone="routine">no phone</Badge>}
                 <button
                   className="btn"
-                  disabled={!phone || dialing === patient.id}
-                  onClick={() => void dial(patient)}
+                  disabled={!phone}
+                  title={phone ? `Call ${name}` : 'No phone number on file'}
+                  onClick={() =>
+                    patient.id && setTarget({ patientId: patient.id, name, phone })
+                  }
                 >
-                  {Icon.phone()} {dialing === patient.id ? 'Calling…' : 'Call'}
+                  {Icon.phone()} Call
                 </button>
-                <button
-                  className="btn"
-                  onClick={() => patient.id && onOpenLive(patient.id)}
-                >
+                <button className="btn" onClick={() => patient.id && onOpenLive(patient.id)}>
                   Live
                 </button>
               </div>

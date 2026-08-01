@@ -1,7 +1,7 @@
 import type { CarePlan, Patient } from '@medplum/fhirtypes';
 import type { Route } from '../App';
 import { useCalls, usePatientNames, usePlanSummaries, type Priority } from '../data';
-import { Avatar, Badge, Card, Empty, Icon, Stat, relativeTime } from '../ui';
+import { Avatar, Badge, Card, Empty, Icon, Skeleton, Stat, relativeTime } from '../ui';
 
 const PRIORITY_RANK: Record<Priority, number> = { critical: 0, urgent: 1, routine: 2 };
 
@@ -14,11 +14,13 @@ function greeting(): string {
 
 export function DashboardPage({
   plans,
+  loading,
   patients,
   onOpenPlan,
   onNavigate,
 }: {
   plans: CarePlan[];
+  loading?: boolean;
   patients: Patient[];
   onOpenPlan: (plan: CarePlan) => void;
   onNavigate: (route: Route) => void;
@@ -129,8 +131,12 @@ export function DashboardPage({
             </button>
           }
         >
-          {ranked.length === 0 ? (
-            <Empty>No draft plans are waiting.</Empty>
+          {loading && ranked.length === 0 ? (
+            <Skeleton rows={4} />
+          ) : ranked.length === 0 ? (
+            <Empty title="Queue is clear">
+              Draft plans appear here within about 15 seconds of a call ending.
+            </Empty>
           ) : (
             ranked.slice(0, 5).map(({ plan, name, priority }) => (
               <button key={plan.id} className="row" onClick={() => onOpenPlan(plan)}>
@@ -155,7 +161,9 @@ export function DashboardPage({
           }
         >
           {calls.length === 0 ? (
-            <Empty>No calls recorded yet.</Empty>
+            <Empty title="No calls yet">
+              Start one from New intake or the Patients directory.
+            </Empty>
           ) : (
             calls.slice(0, 5).map((call) => {
               const name = callNames.get(call.patientReference ?? '') ?? 'Unknown patient';

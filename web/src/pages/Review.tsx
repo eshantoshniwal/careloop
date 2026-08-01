@@ -12,7 +12,7 @@ import {
   usePlanSummaries,
 } from '../data';
 import { Trend } from '../components/Trend';
-import { Avatar, Badge, Card, Empty, Icon, clockTime, relativeTime } from '../ui';
+import { Avatar, Badge, Card, Empty, Icon, Skeleton, clockTime, relativeTime } from '../ui';
 
 function severityOf(line: string): 'critical' | 'warning' | 'info' {
   const lower = line.toLowerCase();
@@ -93,11 +93,13 @@ function MedicationRow({
 
 export function ReviewPage({
   plans,
+  loading,
   selected,
   onSelect,
   onChanged,
 }: {
   plans: CarePlan[];
+  loading?: boolean;
   selected?: CarePlan;
   onSelect: (plan: CarePlan) => void;
   onChanged: () => void;
@@ -170,9 +172,13 @@ export function ReviewPage({
       </header>
 
       <div className="grid-review">
-        <Card title="Drafts">
-          {summaries.length === 0 ? (
-            <Empty>Nothing waiting for review.</Empty>
+        <Card title="Drafts" subtitle="Worst first">
+          {loading && summaries.length === 0 ? (
+            <Skeleton rows={4} />
+          ) : summaries.length === 0 ? (
+            <Empty title="Nothing waiting">
+              A draft appears here within about 15 seconds of a call ending.
+            </Empty>
           ) : (
             summaries.map(({ plan: p, name, priority }) => (
               <button
@@ -192,8 +198,10 @@ export function ReviewPage({
         </Card>
 
         {!plan ? (
-          <Card padded>
-            <Empty>Select a draft plan to review it.</Empty>
+          <Card>
+            <Empty title="Select a draft">
+              Pick a plan on the left to see its trend, safety flags, evidence and regimen.
+            </Empty>
           </Card>
         ) : (
           <div className="stack">

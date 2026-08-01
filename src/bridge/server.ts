@@ -13,7 +13,7 @@ import {
 } from '../integrations/twilio.js';
 import { recordCall } from '../integrations/calllog.js';
 import { logger } from '../logger.js';
-import { loadPatientContext } from '../orchestration/context.js';
+import { UnresolvedModuleError, loadPatientContext } from '../orchestration/context.js';
 import { createIntake } from '../orchestration/intake.js';
 import { approvePlan } from '../orchestration/plan.js';
 import {
@@ -220,6 +220,17 @@ app.post('/call', requireSecret, async (req, res) => {
 
     res.status(202).json({ callId, callSid: call.callSid, mock: call.mock });
   } catch (error) {
+    // A patient with no coded condition is a routine situation the clinician
+    // can fix by naming the treatment — it must not read as a server fault.
+    if (error instanceof UnresolvedModuleError) {
+      logger.info({ patientId: parsed.data.patientId }, 'call.needs-module');
+      res.status(422).json({
+        error: error.message,
+        needsModule: true,
+        modules: listModules().map((module) => ({ id: module.id, display: module.display })),
+      });
+      return;
+    }
     logger.error({ err: String(error) }, 'call.failed');
     res.status(500).json({ error: 'could not start call' });
   }

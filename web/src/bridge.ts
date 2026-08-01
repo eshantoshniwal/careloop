@@ -28,12 +28,22 @@ async function requestMethod<T>(method: string, path: string, body?: unknown): P
     throw new Error(`Bridge returned ${response.status}: ${text.slice(0, 200)}`);
   }
   if (!response.ok) {
-    // Validation failures carry structured detail worth surfacing verbatim —
-    // "invalid module" alone is useless when authoring a treatment.
+    // Structured detail is carried onto the error rather than flattened into a
+    // string: a 422 that names the recoverable problem lets the UI offer the
+    // fix in place instead of just reporting failure.
     const detail =
       parsed.problems?.join('; ') ??
       parsed.issues?.map((i: any) => `${i.path?.join('.')}: ${i.message}`).join('; ');
-    throw new Error(detail ? `${parsed.error}: ${detail}` : parsed.error ?? `Bridge returned ${response.status}`);
+    const error = new Error(
+      detail ? `${parsed.error}: ${detail}` : parsed.error ?? `Bridge returned ${response.status}`,
+    ) as Error & { status?: number; needsModule?: boolean; modules?: unknown };
+    error.status = response.status;
+    if (parsed.needsModule) {
+      error.needsModule = true;
+      error.modules = parsed.modules;
+      error.message = parsed.error;
+    }
+    throw error;
   }
   return parsed as T;
 }

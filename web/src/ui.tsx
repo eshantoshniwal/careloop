@@ -110,8 +110,65 @@ export function Stat({
   );
 }
 
-export function Empty({ children }: { children: ReactNode }): JSX.Element {
-  return <p className="empty">{children}</p>;
+/**
+ * Empty states say what would fill the space and how to get there. "No data"
+ * leaves the reader unsure whether the system is broken or simply idle.
+ */
+export function Empty({ title, children }: { title?: string; children: ReactNode }): JSX.Element {
+  return (
+    <div className="empty">
+      {title && <strong>{title}</strong>}
+      {children}
+    </div>
+  );
+}
+
+export function Skeleton({ rows = 3 }: { rows?: number }): JSX.Element {
+  return (
+    <div style={{ padding: '14px 24px' }} aria-hidden>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '9px 0' }}>
+          <div className="skeleton" style={{ width: 30, height: 30, borderRadius: '50%' }} />
+          <div style={{ flex: 1 }}>
+            <div className="skeleton" style={{ height: 11, width: `${45 + ((i * 17) % 30)}%` }} />
+            <div className="skeleton" style={{ height: 9, width: '30%', marginTop: 7 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function Modal({
+  title,
+  children,
+  footer,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  footer: ReactNode;
+  onClose: () => void;
+}): JSX.Element {
+  return (
+    <div
+      className="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+      onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      tabIndex={-1}
+    >
+      <div className="modal">
+        <header className="card-head">
+          <h2>{title}</h2>
+        </header>
+        <div className="modal-body">{children}</div>
+        <footer className="modal-foot">{footer}</footer>
+      </div>
+    </div>
+  );
 }
 
 export function relativeTime(iso: string | undefined): string {
@@ -156,4 +213,40 @@ export const Icon = {
   logout: (p = { ...S, width: 17, height: 17 }) => (<svg {...p}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 12H3M6 8l-3 4 3 4" /></svg>),
   check: (p = { ...S, width: 15, height: 15 }) => (<svg {...p}><path d="M20 6 9 17l-5-5" /></svg>),
   trend: (p = S) => (<svg {...p}><path d="M3 17l5-6 4 3 6-8" /><path d="M15 6h4v4" /></svg>),
+  sun: (p = { ...S, width: 17, height: 17 }) => (<svg {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>),
+  moon: (p = { ...S, width: 17, height: 17 }) => (<svg {...p}><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" /></svg>),
+  menu: (p = S) => (<svg {...p}><path d="M4 7h16M4 12h16M4 17h16" /></svg>),
+  search: (p = { ...S, width: 16, height: 16 }) => (<svg {...p}><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>),
 };
+
+// --------------------------------------------------------------- theme
+
+export type Theme = 'light' | 'dark' | 'system';
+
+const THEME_KEY = 'careloop-theme';
+
+export function readTheme(): Theme {
+  const stored = localStorage.getItem(THEME_KEY);
+  return stored === 'light' || stored === 'dark' ? stored : 'system';
+}
+
+/**
+ * The toggle must win over the OS setting in both directions, so the choice is
+ * stamped on the root element and the stylesheet scopes its dark values under
+ * both the media query and `[data-theme]`.
+ */
+export function applyTheme(theme: Theme): void {
+  const root = document.documentElement;
+  if (theme === 'system') {
+    root.removeAttribute('data-theme');
+    localStorage.removeItem(THEME_KEY);
+  } else {
+    root.setAttribute('data-theme', theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }
+}
+
+export function resolvedTheme(theme: Theme): 'light' | 'dark' {
+  if (theme !== 'system') return theme;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}

@@ -27,6 +27,30 @@ import type {
  * trajectory, coverage for eligibility.
  */
 
+/**
+ * A patient with no coded condition, or one whose condition matches no module.
+ *
+ * This is a routine, recoverable situation — the clinician just has to say
+ * which treatment to run — so it is a distinct type rather than a generic
+ * Error. Surfacing it as a 500 "could not start call" tells the clinician
+ * nothing they can act on.
+ */
+export class UnresolvedModuleError extends Error {
+  readonly patientId: string;
+  readonly hasCondition: boolean;
+
+  constructor(patientId: string, hasCondition: boolean) {
+    super(
+      hasCondition
+        ? `Patient ${patientId} has a condition on file that matches no treatment module. Choose a treatment for this call.`
+        : `Patient ${patientId} has no condition on file. Choose a treatment for this call.`,
+    );
+    this.name = 'UnresolvedModuleError';
+    this.patientId = patientId;
+    this.hasCondition = hasCondition;
+  }
+}
+
 function patientName(patient: Patient | undefined): string {
   const name = patient?.name?.[0];
   if (!name) return 'the patient';
@@ -108,9 +132,7 @@ export async function loadPatientContext(input: {
     });
 
   if (!module) {
-    throw new Error(
-      `Could not resolve a condition module for patient ${patientId}. Pass moduleId explicitly.`,
-    );
+    throw new UnresolvedModuleError(patientId, Boolean(anchor));
   }
 
   // Prior finalised total-score Observations, oldest to newest.

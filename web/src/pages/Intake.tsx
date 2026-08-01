@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { createIntake, getModules, startCall, type ModuleSummary } from '../bridge';
+import { createIntake, getModules, type ModuleSummary } from '../bridge';
+import { CallDialog } from '../components/CallDialog';
 import { Badge, Card, Icon } from '../ui';
 
 /**
@@ -26,6 +27,7 @@ export function IntakePage({
 
   const [created, setCreated] = useState<{ patientId: string; moduleId: string }>();
   const [busy, setBusy] = useState(false);
+  const [dialing, setDialing] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error' | 'warn'; text: string }>();
 
   useEffect(() => {
@@ -64,28 +66,6 @@ export function IntakePage({
     }
   }
 
-  async function dial(): Promise<void> {
-    if (!created) return;
-    if (!window.confirm(`Call ${givenName} ${familyName} on ${phone} now?`)) return;
-    setBusy(true);
-    try {
-      const result = await startCall(created.patientId, created.moduleId);
-      if (result.mock) {
-        setMessage({ kind: 'warn', text: 'Twilio is in mock mode — no real call was placed.' });
-      } else {
-        setMessage({ kind: 'ok', text: 'Calling now — opening the live view.' });
-        onCallStarted(created.patientId);
-      }
-    } catch (error) {
-      setMessage({
-        kind: 'error',
-        text: error instanceof Error ? error.message : 'Could not start the call.',
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const selected = modules.find((m) => m.id === moduleId);
 
   return (
@@ -96,6 +76,19 @@ export function IntakePage({
           <p className="sub">Create the record, then start the check-in call.</p>
         </div>
       </header>
+
+      {dialing && created && (
+        <CallDialog
+          target={{
+            patientId: created.patientId,
+            name: `${givenName} ${familyName}`.trim(),
+            phone,
+            moduleId: created.moduleId,
+          }}
+          onClose={() => setDialing(false)}
+          onStarted={onCallStarted}
+        />
+      )}
 
       <div className="grid-2">
         <Card title="Patient" padded>
@@ -189,8 +182,13 @@ export function IntakePage({
               <div style={{ marginTop: 18 }}>
                 <Badge tone="info">Maya will verify DOB before any clinical question</Badge>
               </div>
-              <button className="btn primary" onClick={dial} disabled={busy} style={{ marginTop: 18 }}>
-                {Icon.phone()} {busy ? 'Dialling…' : `Call ${givenName || 'patient'} now`}
+              <button
+                className="btn primary"
+                onClick={() => setDialing(true)}
+                disabled={busy}
+                style={{ marginTop: 18 }}
+              >
+                {Icon.phone()} Call {givenName || 'patient'} now
               </button>
               <p className="small muted" style={{ marginTop: 12 }}>
                 This places a real phone call. Only do it when the patient is expecting it.
