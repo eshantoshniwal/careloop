@@ -1,7 +1,16 @@
 import type { CarePlan, Patient } from '@medplum/fhirtypes';
 import type { Route } from '../App';
-import { idFromReference, useCalls, usePatientNames, usePlanSummaries, type Priority } from '../data';
-import { Avatar, Badge, Card, Chip, Empty, Icon, Skeleton, Stat, relativeTime } from '../ui';
+import {
+  communicationText,
+  displayName,
+  idFromReference,
+  useCalls,
+  useLiveFeed,
+  usePatientNames,
+  usePlanSummaries,
+  type Priority,
+} from '../data';
+import { Avatar, Badge, Card, Chip, Empty, Icon, Skeleton, Stat, clockTime, relativeTime } from '../ui';
 
 const PRIORITY_RANK: Record<Priority, number> = { critical: 0, urgent: 1, routine: 2 };
 
@@ -30,6 +39,10 @@ export function DashboardPage({
   const summaries = usePlanSummaries(plans);
   const calls = useCalls();
   const callNames = usePatientNames(calls.map((c) => c.patientReference));
+  // Live charting for the most recently touched patient, so the dashboard shows
+  // documentation writing itself the moment a call is in progress.
+  const watched = patients[0];
+  const { live, chartLines } = useLiveFeed(watched?.id, 5000);
 
   const counts = {
     critical: summaries.filter((s) => s.priority === 'critical').length,
@@ -74,7 +87,34 @@ export function DashboardPage({
         <Chip onClick={() => onNavigate('treatments')}>{Icon.clipboard()} Treatments</Chip>
       </div>
 
-      <div className="grid-dash">
+      <div className="grid-3">
+        <Stat
+          icon={Icon.inbox()}
+          value={plans.length}
+          label="Draft plans"
+          sub="in the queue"
+          tone="brand"
+          onClick={() => onNavigate('review')}
+        />
+        <Stat
+          icon={Icon.phone()}
+          value={callsToday}
+          label="Calls today"
+          sub={`${calls.length} total`}
+          tone="info"
+          onClick={() => onNavigate('calls')}
+        />
+        <Stat
+          icon={Icon.users()}
+          value={patients.length}
+          label="Patients"
+          sub="in your workspace"
+          tone="ok"
+          onClick={() => onNavigate('patients')}
+        />
+      </div>
+
+      <div className="grid-2" style={{ marginTop: 16 }}>
         <Card padded>
           <div
             className="stat-icon"
@@ -109,32 +149,34 @@ export function DashboardPage({
           </div>
         </Card>
 
-        <div className="stack">
-          <Stat
-            icon={Icon.inbox()}
-            value={plans.length}
-            label="Draft plans"
-            sub="in the queue"
-            tone="brand"
-            onClick={() => onNavigate('review')}
-          />
-          <Stat
-            icon={Icon.phone()}
-            value={callsToday}
-            label="Calls today"
-            sub={`${calls.length} total`}
-            tone="info"
-            onClick={() => onNavigate('calls')}
-          />
-          <Stat
-            icon={Icon.users()}
-            value={patients.length}
-            label="Patients"
-            sub="in your workspace"
-            tone="ok"
-            onClick={() => onNavigate('patients')}
-          />
-        </div>
+        <Card
+          title="Live charting"
+          subtitle={
+            live
+              ? `Documenting ${watched ? displayName(watched) : 'a call'} now`
+              : 'Documentation appears here during a call'
+          }
+          action={live ? <Badge tone="live">Live</Badge> : <Badge tone="routine">Idle</Badge>}
+        >
+          {chartLines.length === 0 ? (
+            <Empty title={live ? 'Listening…' : 'Nothing charting right now'}>
+              When a check-in call is in progress, each answer is written to the record here in real
+              time. <button className="link" onClick={() => onNavigate('intake')}>Start a check-in →</button>
+            </Empty>
+          ) : (
+            <>
+              {chartLines.slice(0, 6).map((line) => (
+                <div key={line.id} className="feed-item">
+                  <span className="feed-time">{clockTime(line.sent)}</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>{communicationText(line)}</span>
+                </div>
+              ))}
+              <div style={{ padding: '12px 24px' }}>
+                <button className="link" onClick={() => onNavigate('live')}>Open the live feed →</button>
+              </div>
+            </>
+          )}
+        </Card>
       </div>
 
       <div className="grid-2" style={{ marginTop: 16 }}>

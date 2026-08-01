@@ -8,11 +8,19 @@ import { MedplumClient, type LoginAuthenticationResponse } from '@medplum/core';
  * must never hold it. The signed-in clinician's own Medplum session decides
  * what this app can see.
  */
-export const medplum = new MedplumClient({
+import { mockMedplum } from './mock';
+
+const realMedplum = new MedplumClient({
   baseUrl: import.meta.env.VITE_MEDPLUM_BASE_URL || 'https://api.medplum.com/',
   clientId: import.meta.env.VITE_MEDPLUM_CLIENT_ID || undefined,
   cacheTime: 10_000,
 });
+
+// VITE_MOCK swaps in an in-memory fixture backend for local visual development
+// (no Medplum login). It is off unless the flag is explicitly set.
+export const medplum: MedplumClient = (import.meta.env.VITE_MOCK
+  ? (mockMedplum as unknown as MedplumClient)
+  : realMedplum);
 
 export const PROJECT_ID = import.meta.env.VITE_MEDPLUM_PROJECT_ID || undefined;
 

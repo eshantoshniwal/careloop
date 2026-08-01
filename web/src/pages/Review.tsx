@@ -12,9 +12,12 @@ import {
   saveMedication,
   useReviewData,
   usePlanSummaries,
+  type Priority,
 } from '../data';
 import { Trend } from '../components/Trend';
-import { Avatar, Badge, Card, Empty, Icon, Skeleton, clockTime, relativeTime, type Tone } from '../ui';
+import { Avatar, Badge, Card, Chip, Empty, Icon, MetricStrip, Skeleton, clockTime, relativeTime, type Tone } from '../ui';
+
+const PRIORITY_RANK: Record<Priority, number> = { critical: 0, urgent: 1, routine: 2 };
 
 function severityOf(line: string): 'critical' | 'warning' | 'info' {
   const lower = line.toLowerCase();
@@ -149,12 +152,22 @@ export function ReviewPage({
   onOpenLive?: (patientId: string) => void;
 }): JSX.Element {
   const summaries = usePlanSummaries(plans);
-  const plan = selected ?? plans[0];
   const [reloadKey, setReloadKey] = useState(0);
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string }>();
   const [callTarget, setCallTarget] = useState<CallTarget>();
+  const [filter, setFilter] = useState<'all' | Priority>('all');
+
+  // Worst first, for real — the list is triage-ordered, not recency-ordered.
+  const ranked = [...summaries].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
+  const counts = {
+    critical: summaries.filter((s) => s.priority === 'critical').length,
+    urgent: summaries.filter((s) => s.priority === 'urgent').length,
+    routine: summaries.filter((s) => s.priority === 'routine').length,
+  };
+  const shownSummaries = ranked.filter((s) => filter === 'all' || s.priority === filter);
+  const plan = selected ?? ranked[0]?.plan ?? plans[0];
 
   const { patient, medications, communications, scores, task } = useReviewData(plan, reloadKey);
   const patientId = idFromReference(plan?.subject?.reference);
@@ -230,16 +243,47 @@ export function ReviewPage({
         />
       )}
 
+      {summaries.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <MetricStrip
+            items={[
+              { label: 'Awaiting review', value: summaries.length, tone: 'brand' },
+              { label: 'Critical', value: counts.critical, tone: counts.critical ? 'critical' : 'routine' },
+              { label: 'Urgent', value: counts.urgent, tone: counts.urgent ? 'urgent' : 'routine' },
+              { label: 'Routine', value: counts.routine, tone: 'ok' },
+            ]}
+          />
+        </div>
+      )}
+
       <div className="grid-review">
-        <Card title="Drafts" subtitle="Worst first">
+        <Card
+          title="Drafts"
+          subtitle="Worst first"
+          action={
+            summaries.length > 0 && (
+              <div className="chips">
+                <Chip active={filter === 'all'} onClick={() => setFilter('all')}>All {summaries.length}</Chip>
+                {counts.critical > 0 && (
+                  <Chip active={filter === 'critical'} onClick={() => setFilter('critical')}>Critical {counts.critical}</Chip>
+                )}
+                {counts.urgent > 0 && (
+                  <Chip active={filter === 'urgent'} onClick={() => setFilter('urgent')}>Urgent {counts.urgent}</Chip>
+                )}
+              </div>
+            )
+          }
+        >
           {loading && summaries.length === 0 ? (
             <Skeleton rows={4} />
           ) : summaries.length === 0 ? (
             <Empty title="Nothing waiting">
               A draft appears here within about 15 seconds of a call ending.
             </Empty>
+          ) : shownSummaries.length === 0 ? (
+            <Empty>No {filter} plans in the queue.</Empty>
           ) : (
-            summaries.map(({ plan: p, name, priority }) => (
+            shownSummaries.map(({ plan: p, name, priority }) => (
               <button
                 key={p.id}
                 className={`row ${p.id === plan?.id ? 'selected' : ''}`}
