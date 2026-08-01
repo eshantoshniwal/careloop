@@ -13,6 +13,18 @@ import { medplum } from '../medplum';
 import { Avatar, Badge, Card, Empty, Icon, MetricStrip, Sparkline, clockTime, relativeTime } from '../ui';
 
 /**
+ * Approval stamps a note on the plan; surfacing it is what makes an approved
+ * plan auditable at a glance rather than just "active".
+ */
+function approvedLabel(plan: CarePlan): string | undefined {
+  const note = plan.note?.map((n) => n.text ?? '').find((t) => /^Approved at /i.test(t));
+  const iso = note?.match(/Approved at (\S+?)(?:\s|\.|$)/)?.[1];
+  if (!iso) return undefined;
+  const when = new Date(iso);
+  return Number.isNaN(when.getTime()) ? 'approved' : `approved ${relativeTime(iso)}`;
+}
+
+/**
  * The single place a patient comes together.
  *
  * Every other screen is a queue or a stream sliced across all patients; this is
@@ -63,6 +75,7 @@ export function PatientPage({
 
   const drafts = plans.filter((p) => p.status === 'draft');
   const activePlans = plans.filter((p) => p.status === 'active');
+  const others = plans.filter((p) => p.status !== 'draft' && p.status !== 'active');
 
   const scores = observations
     .filter((o) => o.valueQuantity?.unit === '{score}')
@@ -193,24 +206,51 @@ export function PatientPage({
 
         {/* Main column — plans, trend, recent charting */}
         <div className="stack">
-          <Card title="Care plans" subtitle={plans.length ? 'Newest first' : undefined}>
+          {/* Plans are grouped by what the clinician still owes: anything in
+              draft is work, anything approved is the plan actually in force. */}
+          <Card title="Care plans" subtitle={plans.length ? `${drafts.length} awaiting review · ${activePlans.length} approved` : undefined}>
             {plans.length === 0 ? (
               <Empty title="No plans yet">
                 A draft plan is written within about 15 seconds of a completed check-in call.
               </Empty>
             ) : (
-              plans.map((plan) => (
-                <button key={plan.id} className="row" onClick={() => onOpenPlan(plan)}>
-                  <span className="grow">
-                    <span className="name">{plan.title ?? 'Care plan'}</span>
-                    <span className="meta">drafted {relativeTime(plan.created)}</span>
-                  </span>
-                  <Badge tone={plan.status === 'draft' ? 'urgent' : plan.status === 'active' ? 'ok' : 'routine'}>
-                    {plan.status}
-                  </Badge>
-                  <span className="chev">{Icon.arrowRight()}</span>
-                </button>
-              ))
+              <>
+                {drafts.length > 0 && <div className="day-sep">Awaiting review</div>}
+                {drafts.map((plan) => (
+                  <button key={plan.id} className="row" onClick={() => onOpenPlan(plan)}>
+                    <span className="grow">
+                      <span className="name">{plan.title ?? 'Care plan'}</span>
+                      <span className="meta">drafted {relativeTime(plan.created)}</span>
+                    </span>
+                    <Badge tone="urgent">needs review</Badge>
+                    <span className="chev">{Icon.arrowRight()}</span>
+                  </button>
+                ))}
+
+                {activePlans.length > 0 && <div className="day-sep">Approved &amp; in force</div>}
+                {activePlans.map((plan) => (
+                  <button key={plan.id} className="row" onClick={() => onOpenPlan(plan)}>
+                    <span className="grow">
+                      <span className="name">{plan.title ?? 'Care plan'}</span>
+                      <span className="meta">{approvedLabel(plan) ?? `started ${relativeTime(plan.created)}`}</span>
+                    </span>
+                    <Badge tone="ok">{Icon.check()} approved</Badge>
+                    <span className="chev">{Icon.arrowRight()}</span>
+                  </button>
+                ))}
+
+                {others.length > 0 && <div className="day-sep">Superseded</div>}
+                {others.map((plan) => (
+                  <button key={plan.id} className="row" onClick={() => onOpenPlan(plan)}>
+                    <span className="grow">
+                      <span className="name">{plan.title ?? 'Care plan'}</span>
+                      <span className="meta">{relativeTime(plan.created)}</span>
+                    </span>
+                    <Badge tone="routine">{plan.status}</Badge>
+                    <span className="chev">{Icon.arrowRight()}</span>
+                  </button>
+                ))}
+              </>
             )}
           </Card>
 

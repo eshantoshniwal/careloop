@@ -101,7 +101,7 @@ export function App(): JSX.Element {
   return (
     <div className="shell">
       <aside className={`sidebar${navOpen ? ' open' : ''}`}>
-        <div className="brand">
+        <div className="app-brand">
           <span className="brand-mark">
             <svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">

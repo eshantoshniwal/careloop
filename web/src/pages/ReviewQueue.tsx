@@ -41,6 +41,7 @@ export function ReviewQueuePage({
   const [filter, setFilter] = useState<'all' | TriageLevel>('all');
   const [sort, setSort] = useState<Sort>('urgent');
   const [preview, setPreview] = useState<EnrichedPlan>();
+  const [hoveredDot, setHoveredDot] = useState<string>();
 
   const triaged = useMemo(
     () =>
@@ -156,14 +157,36 @@ export function ReviewQueuePage({
                       style={{ width: `${((b.max - b.min + 1) / (span + 1)) * 100}%`, background: toneVars(b.tone).bg }}
                     />
                   ))}
-                  {patients.map((p, i) => (
-                    <span
-                      key={`${p.name}-${i}`}
-                      className="qi-dot"
-                      style={{ left: `${((p.total - scale.min) / span) * 100}%` }}
-                      title={`${p.name}: ${scale.instrument} ${p.total} — ${bandForScore(scale, p.total).label}`}
-                    />
-                  ))}
+                  {patients.map((p, i) => {
+                    const key = `${scale.instrument}-${p.name}-${i}`;
+                    const pct = ((p.total - scale.min) / span) * 100;
+                    return (
+                      <span
+                        key={key}
+                        className={`qi-dot${hoveredDot === key ? ' active' : ''}`}
+                        style={{ left: `${pct}%` }}
+                        tabIndex={0}
+                        role="img"
+                        aria-label={`${p.name}: ${scale.instrument} ${p.total} — ${bandForScore(scale, p.total).label}`}
+                        onMouseEnter={() => setHoveredDot(key)}
+                        onMouseLeave={() => setHoveredDot((c) => (c === key ? undefined : c))}
+                        onFocus={() => setHoveredDot(key)}
+                        onBlur={() => setHoveredDot((c) => (c === key ? undefined : c))}
+                      >
+                        {hoveredDot === key && (
+                          // Anchored above the track so it never covers the legend
+                          // underneath, and flipped inward at the extremes.
+                          <span
+                            className="qi-tip"
+                            style={pct > 70 ? { right: 0, transform: 'none' } : pct < 30 ? { left: 0, transform: 'none' } : undefined}
+                          >
+                            <strong>{p.name}</strong>
+                            {` · ${scale.instrument} ${p.total} — ${bandForScore(scale, p.total).label}`}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
                 </div>
                 <div className="sevbar-legend" style={{ marginTop: 9 }}>
                   {scale.bands.map((b) => (

@@ -25,7 +25,7 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }): JSX.Element 
   return (
     <div className="signin-wrap">
       <div className="signin">
-        <div className="brand">
+        <div className="app-brand">
           <span className="brand-mark">
             <svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">

@@ -307,8 +307,14 @@ export function ReviewPage({
         acknowledgedCriticalFlags: acknowledged,
       });
       if (result.approved) {
-        setMessage({ kind: 'ok', text: 'Approved. The plan and every medication are now active.' });
+        setMessage({
+          kind: 'ok',
+          text: 'Approved. The plan and its medications are active, and it now shows under the patient’s approved plans.',
+        });
         onChanged();
+        // The plan has left the queue — return there so the reviewer sees what
+        // is still outstanding rather than a now-approved plan.
+        setTimeout(() => onBack?.(), 1400);
       } else {
         setMessage({ kind: 'error', text: result.reason ?? 'Approval was refused.' });
       }

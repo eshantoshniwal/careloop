@@ -182,7 +182,9 @@ a { color: var(--brand); }
   z-index: 20;
 }
 
-.brand { display: flex; align-items: center; gap: 10px; padding: 20px 20px 22px; }
+/* Namespaced: a bare `.brand` collided with the `brand` tone class used by
+   badges, chips and stat strips, silently giving them this padding. */
+.app-brand { display: flex; align-items: center; gap: 10px; padding: 20px 20px 22px; }
 .brand-mark {
   width: 32px; height: 32px; border-radius: 9px; flex: 0 0 32px;
   background: var(--brand); color: #fff; display: grid; place-items: center;
@@ -236,7 +238,10 @@ a { color: var(--brand); }
 .icon-btn:hover { background: var(--surface-2); color: var(--ink); }
 
 .main { flex: 1; min-width: 0; padding: 34px 40px 90px; }
-.main-narrow { max-width: 1200px; }
+/* Centred, not hard-left: past the max width the surplus space was all landing
+   on the right, which reads as the whole page being off-centre on a large
+   monitor. Splitting it keeps the column optically centred in the viewport. */
+.main-narrow { max-width: 1280px; margin-inline: auto; }
 
 .page-head { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 26px; flex-wrap: wrap; }
 .page-head h1 { font-size: clamp(24px, 2.4vw, 31px); letter-spacing: -0.03em; }
@@ -262,7 +267,10 @@ a { color: var(--brand); }
   overflow: hidden;
 }
 .card-pad { padding: 22px 24px; }
-.card + .card { margin-top: 16px; }
+/* NOTE: spacing between cards is owned by the container (`.stack` and the grids
+   all set `gap`). A blanket `.card + .card { margin-top }` also hits grid and
+   flex children, which pushed every card except the first in a row down by
+   16px — the row then reads as misaligned — and double-spaced stacks. */
 
 .card-head {
   display: flex; align-items: center; gap: 12px;
@@ -278,8 +286,16 @@ a { color: var(--brand); }
 .stat-sub { color: var(--muted); font-size: 13px; }
 
 .grid-dash { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(240px, 1fr); gap: 16px; align-items: start; }
-.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+/* Side-by-side cards stretch to a shared bottom edge. Letting each size to its
+   own content leaves the row visibly ragged, which reads as broken alignment
+   even when every box is correct on its own. */
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.grid-2 > .card, .grid-3 > .card, .queue-grid > .qcard { height: 100%; }
+/* A stretched card keeps its footer pinned to the bottom rather than floating
+   mid-card when the neighbour is taller. */
+.grid-2 > .card { display: flex; flex-direction: column; }
+.grid-2 > .card > .card-pad { flex: 1; }
 .grid-review { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 16px; align-items: start; }
 .stack { display: flex; flex-direction: column; gap: 16px; }
 
@@ -510,7 +526,7 @@ tbody tr:last-child td { border-bottom: 0; }
     var(--bg);
 }
 .signin { width: 100%; max-width: 400px; animation: enter 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
-.signin .brand { padding: 0 0 20px; }
+.signin .app-brand { padding: 0 0 20px; }
 .signin .card { box-shadow: var(--shadow-lg); }
 
 /* =============================================================== prod polish
@@ -603,7 +619,12 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
   border: 1px solid var(--line); border-radius: var(--r-lg);
   background: var(--surface); box-shadow: var(--shadow); overflow: hidden;
 }
-.statstrip-item { padding: 15px 20px; border-left: 1px solid var(--line); min-width: 0; }
+/* Cells align on their number, then their label, regardless of how many lines
+   a label wraps to — the value must never drift between neighbouring cells. */
+.statstrip-item {
+  padding: 15px 20px; border-left: 1px solid var(--line); min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start;
+}
 .statstrip-item:first-child { border-left: 0; }
 .statstrip .sv { display: block; font-size: 25px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .statstrip .sv.critical { color: var(--critical); } .statstrip .sv.urgent { color: var(--urgent); }
@@ -729,7 +750,17 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
   position: absolute; top: 50%; width: 11px; height: 11px; border-radius: 50%;
   transform: translate(-50%, -50%); background: var(--surface);
   border: 2.5px solid var(--brand); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.25);
+  cursor: default;
 }
+.qi-dot.active { width: 14px; height: 14px; z-index: 3; }
+/* Sits above the track, so it never covers the band legend below it. */
+.qi-tip {
+  position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg);
+  padding: 6px 10px; border-radius: var(--r-sm); font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; pointer-events: none; z-index: 6; box-shadow: var(--shadow-lg);
+}
+.qi-tip strong { font-weight: 700; }
 .qi-secondary {
   display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
   gap: 24px; align-items: start; border-top: 1px solid var(--line); padding-top: 18px; margin-top: 4px;
