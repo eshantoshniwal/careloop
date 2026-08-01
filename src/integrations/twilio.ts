@@ -47,17 +47,46 @@ export async function placeOutboundCall(to: string, callId: string): Promise<Pla
   return { callSid: call.sid, mock: false };
 }
 
+function xmlEscape(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
 /**
  * TwiML that hands the media stream straight to the bridge. `<Connect><Stream>`
  * is bidirectional, which is what lets the agent both hear and speak.
+ *
+ * Identifiers are passed as `<Parameter>` children, not as query string on the
+ * URL. Twilio does not reliably carry a query string through to the media
+ * stream socket — observed live as an upgrade arriving with an empty callId —
+ * whereas `<Parameter>` values are delivered in the `start` frame as
+ * `start.customParameters`. The query string is still appended as a hint for
+ * proxy logs and for the fast path when it does survive.
  */
-export function buildStreamTwiml(callId: string): string {
+export function buildStreamTwiml(input: {
+  callId: string;
+  patientId?: string;
+  conditionId?: string;
+}): string {
+  const { callId, patientId, conditionId } = input;
   const streamUrl = `${publicWsUrl('/twilio')}?callId=${encodeURIComponent(callId)}`;
+  const parameters = [
+    `<Parameter name="callId" value="${xmlEscape(callId)}" />`,
+    patientId ? `<Parameter name="patientId" value="${xmlEscape(patientId)}" />` : '',
+    conditionId ? `<Parameter name="conditionId" value="${xmlEscape(conditionId)}" />` : '',
+  ]
+    .filter(Boolean)
+    .join('\n      ');
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="${streamUrl}">
-      <Parameter name="callId" value="${callId}" />
+    <Stream url="${xmlEscape(streamUrl)}">
+      ${parameters}
     </Stream>
   </Connect>
 </Response>`;

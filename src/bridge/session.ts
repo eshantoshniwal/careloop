@@ -46,25 +46,7 @@ export class CallSession {
       } catch {
         return;
       }
-
-      switch (message.event) {
-        case 'start':
-          this.streamSid = message.start?.streamSid;
-          logger.info({ callId: this.callId, streamSid: this.streamSid }, 'twilio.stream.start');
-          this.startAgent();
-          break;
-        case 'media':
-          if (message.media?.payload) {
-            this.agent?.sendAudio(Buffer.from(message.media.payload, 'base64'));
-          }
-          break;
-        case 'stop':
-          logger.info({ callId: this.callId }, 'twilio.stream.stop');
-          void this.end('twilio-stop');
-          break;
-        default:
-          break;
-      }
+      this.handleTwilioMessage(message);
     });
 
     socket.on('close', () => void this.end('twilio-close'));
@@ -72,6 +54,28 @@ export class CallSession {
       logger.warn({ callId: this.callId, err: String(error) }, 'twilio.socket.error');
       void this.end('twilio-error');
     });
+  }
+
+  /** Public so a deferred attach can replay the `start` frame it consumed. */
+  handleTwilioMessage(message: any): void {
+    switch (message.event) {
+      case 'start':
+        this.streamSid = message.start?.streamSid;
+        logger.info({ callId: this.callId, streamSid: this.streamSid }, 'twilio.stream.start');
+        this.startAgent();
+        break;
+      case 'media':
+        if (message.media?.payload) {
+          this.agent?.sendAudio(Buffer.from(message.media.payload, 'base64'));
+        }
+        break;
+      case 'stop':
+        logger.info({ callId: this.callId }, 'twilio.stream.stop');
+        void this.end('twilio-stop');
+        break;
+      default:
+        break;
+    }
   }
 
   private startAgent(): void {
@@ -195,4 +199,55 @@ export function removeSession(callId: string): void {
 
 export function activeSessionCount(): number {
   return sessions.size;
+}
+
+/**
+ * Binds an incoming Twilio media socket to its CallSession.
+ *
+ * The URL query string is only a hint. Twilio does not reliably carry it to
+ * the media stream socket, so the authoritative identifier is the `callId`
+ * `<Parameter>` delivered in the `start` frame. When the hint is absent the
+ * socket is accepted and held until that frame arrives, then the frame is
+ * replayed into the session so no audio or state is lost.
+ */
+export function routeTwilioSocket(socket: WebSocket, callIdHint?: string): void {
+  const hinted = callIdHint ? getSession(callIdHint) : undefined;
+  if (hinted) {
+    hinted.attachTwilio(socket);
+    return;
+  }
+
+  const giveUp = setTimeout(() => {
+    logger.warn('twilio.stream.no-start-frame');
+    socket.close();
+  }, 15_000);
+
+  const onMessage = (raw: WebSocket.RawData): void => {
+    let message: any;
+    try {
+      message = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    if (message.event !== 'start') return;
+
+    const callId: string | undefined =
+      message.start?.customParameters?.callId ?? message.start?.customParameters?.callid;
+    const session = callId ? getSession(callId) : undefined;
+
+    clearTimeout(giveUp);
+    socket.off('message', onMessage);
+
+    if (!session) {
+      logger.warn({ callId: callId ?? '(none)' }, 'twilio.stream.unresolved');
+      socket.close();
+      return;
+    }
+
+    logger.info({ callId }, 'twilio.stream.resolved-from-parameter');
+    session.attachTwilio(socket);
+    session.handleTwilioMessage(message);
+  };
+
+  socket.on('message', onMessage);
 }
