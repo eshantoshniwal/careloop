@@ -10,6 +10,7 @@ import { LivePage } from './pages/Live';
 import { PatientPage } from './pages/Patient';
 import { PatientsPage } from './pages/Patients';
 import { ReviewPage } from './pages/Review';
+import { ReviewQueuePage } from './pages/ReviewQueue';
 import { TreatmentsPage } from './pages/Treatments';
 import { medplum, signOut } from './medplum';
 import { Avatar, Icon, applyTheme, readTheme, resolvedTheme, type Theme } from './ui';
@@ -185,14 +186,19 @@ export function App(): JSX.Element {
             <LivePage patients={patients} patientId={livePatientId} onSelect={setLivePatientId} />
           )}
           {route === 'review' && (
-            <ReviewPage
-              plans={plans}
-              loading={loading}
-              selected={selectedPlan}
-              onSelect={setSelectedPlan}
-              onChanged={refresh}
-              onOpenLive={openLive}
-            />
+            selectedPlan ? (
+              <ReviewPage
+                plans={plans}
+                loading={loading}
+                selected={selectedPlan}
+                onSelect={setSelectedPlan}
+                onBack={() => setSelectedPlan(undefined)}
+                onChanged={refresh}
+                onOpenLive={openLive}
+              />
+            ) : (
+              <ReviewQueuePage plans={plans} loading={loading} onOpenPlan={setSelectedPlan} />
+            )
           )}
           {route === 'calls' && <CallsPage onOpenPatient={openPatient} />}
           {route === 'patients' && (

@@ -229,11 +229,13 @@ export function Modal({
   children,
   footer,
   onClose,
+  wide,
 }: {
   title: string;
   children: ReactNode;
   footer: ReactNode;
   onClose: () => void;
+  wide?: boolean;
 }): JSX.Element {
   return (
     <div
@@ -245,9 +247,11 @@ export function Modal({
       onKeyDown={(e) => e.key === 'Escape' && onClose()}
       tabIndex={-1}
     >
-      <div className="modal">
+      <div className={`modal${wide ? ' wide' : ''}`}>
         <header className="card-head">
           <h2>{title}</h2>
+          <div className="spacer" />
+          <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
         </header>
         <div className="modal-body">{children}</div>
         <footer className="modal-foot">{footer}</footer>

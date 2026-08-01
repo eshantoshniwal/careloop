@@ -418,7 +418,10 @@ button.btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 100;
   background: rgba(9, 11, 15, 0.45);
-  display: grid; place-items: center; padding: 24px;
+  /* Flex + auto margins keeps the dialog optically centred, and lets a tall
+     dialog scroll from the top instead of overflowing off-screen. */
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; overflow-y: auto;
   animation: fade 0.14s ease;
 }
 @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
@@ -426,8 +429,11 @@ button.btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--r-lg); box-shadow: var(--shadow-lg);
   width: 100%; max-width: 460px; overflow: hidden;
+  margin: auto; flex: 0 0 auto;
+  animation: enter 0.2s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
-.modal-body { padding: 22px 24px; }
+.modal.wide { max-width: 720px; }
+.modal-body { padding: 22px 24px; max-height: min(70vh, 720px); overflow-y: auto; }
 .modal-foot {
   display: flex; gap: 10px; justify-content: flex-end;
   padding: 16px 24px; border-top: 1px solid var(--line); background: var(--surface-2);
@@ -653,6 +659,112 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
 .livebar.on .beat { background: var(--critical); animation: pulse 1.4s ease-in-out infinite; }
 .livebar .lt { font-weight: 650; }
 .livebar .ls { color: var(--muted); font-size: 13px; }
+
+/* ========================================================== clinical charts */
+
+/* Band meter — the instrument range, segmented, with a marker at the score. */
+.bandmeter { width: 100%; }
+.bandmeter-track { position: relative; display: flex; gap: 2px; height: 10px; }
+.bandmeter-seg { border-radius: 3px; }
+.bandmeter-marker {
+  position: absolute; top: -3px; width: 3px; height: 16px; border-radius: 2px;
+  background: var(--ink); transform: translateX(-50%);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.bandmeter-ticks { position: relative; height: 14px; margin-top: 3px; }
+.bandmeter-tick { position: absolute; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bandmeter-foot { display: flex; align-items: baseline; justify-content: space-between; margin-top: 7px; font-size: 12px; color: var(--muted); }
+.bandmeter-current { display: inline-flex; align-items: baseline; gap: 7px; }
+.bandmeter-current strong { font-size: 15px; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* Delta badge — signed change, flagged when clinically meaningful. */
+.delta {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 650;
+  font-variant-numeric: tabular-nums; border: 1px solid transparent;
+}
+.delta.tone-green { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-line); }
+.delta.tone-red { background: var(--critical-bg); color: var(--critical); border-color: var(--critical-line); }
+.delta.tone-gray { background: var(--surface-3); color: var(--muted); border-color: var(--line-2); }
+.delta-flag { font-weight: 600; opacity: 0.85; }
+
+/* Severity bar — ordered stacked distribution with a labelled legend. */
+.sevbar-track { display: flex; gap: 2px; height: 10px; }
+.sevbar-seg { border-radius: 3px; min-width: 3px; }
+.sevbar-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+.sevbar-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.sevbar-legend-item i { width: 9px; height: 9px; border-radius: 3px; display: block; }
+
+/* Item breakdown — which questions drive the total. */
+.items { display: flex; flex-direction: column; gap: 10px; }
+.item { border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; background: var(--surface); }
+.item.high { background: var(--critical-bg); border-color: var(--critical-line); }
+.item.medium { background: var(--urgent-bg); border-color: var(--urgent-line); }
+.item-head { display: flex; align-items: center; gap: 10px; }
+.item-label { font-weight: 650; flex: 1; min-width: 0; }
+.item-score { font-size: 12.5px; font-weight: 700; padding: 2px 9px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.item-track { height: 6px; border-radius: 3px; background: var(--surface-3); margin-top: 9px; overflow: hidden; }
+.item-fill { height: 100%; border-radius: 3px; }
+.item-prompt { margin-top: 8px; }
+
+/* ============================================================= review queue */
+
+/* Queue-at-a-glance: every patient as a dot on the instrument's own scale. */
+.qi-track { position: relative; display: flex; gap: 2px; height: 14px; }
+.qi-band { border-radius: 4px; }
+.qi-dot {
+  position: absolute; top: 50%; width: 11px; height: 11px; border-radius: 50%;
+  transform: translate(-50%, -50%); background: var(--surface);
+  border: 2.5px solid var(--brand); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.25);
+}
+.qi-secondary {
+  display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 24px; align-items: start; border-top: 1px solid var(--line); padding-top: 18px; margin-top: 4px;
+}
+.qi-metrics { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 12px; }
+.qi-metrics > div { display: flex; flex-direction: column; }
+.qm-v { font-size: 25px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.qm-l { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+@media (max-width: 860px) { .qi-secondary { grid-template-columns: minmax(0, 1fr); } }
+
+.queue-controls { display: flex; align-items: center; gap: 14px; margin: 18px 0 14px; flex-wrap: wrap; }
+.sort-field { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.sort-field select { width: auto; padding: 7px 10px; font-weight: 600; }
+
+/* The board itself. */
+.queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; align-items: start; }
+.qcard {
+  position: relative; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 18px 20px;
+  animation: enter 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+.qcard:hover { box-shadow: var(--shadow-lg); }
+.qcard.critical { border-color: var(--critical-line); }
+.qcard.urgent { border-color: var(--urgent-line); }
+.qcard-edge { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+.qcard-head { display: flex; align-items: center; gap: 12px; }
+.qcard-head h3 { font-size: 16px; }
+.qcard-reasons { margin: 13px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--ink-2); }
+.qcard-facts {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px;
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
+}
+.qcard-facts .l { display: block; font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.qcard-facts .v { display: block; margin-top: 3px; font-weight: 600; font-size: 13.5px; }
+.qcard-facts .pa { color: var(--urgent); font-weight: 700; }
+.qcard-quote {
+  margin: 14px 0 0; padding: 10px 0 10px 13px; border-left: 2px solid var(--brand-line);
+  font-size: 13px; color: var(--ink-2); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.qcard-foot { display: flex; align-items: center; gap: 9px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+/* Patient facts grid on the review detail. */
+.factgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; margin: 18px 0 0; }
+.factgrid dt { font-size: 11px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.factgrid dd { margin: 4px 0 0; font-weight: 600; font-size: 14px; }
+@media (max-width: 560px) { .factgrid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Search input with a leading icon. */
 .search-field { position: relative; }

@@ -288,6 +288,7 @@ export function useReviewData(plan: CarePlan | undefined, reloadKey = 0): {
   medications: MedicationRequest[];
   communications: Communication[];
   scores: Observation[];
+  itemAnswers: Observation[];
   task?: Task;
   loading: boolean;
 } {
@@ -295,6 +296,7 @@ export function useReviewData(plan: CarePlan | undefined, reloadKey = 0): {
   const [medications, setMedications] = useState<MedicationRequest[]>([]);
   const [communications, setCommunications] = useState<Communication[]>([]);
   const [scores, setScores] = useState<Observation[]>([]);
+  const [itemAnswers, setItemAnswers] = useState<Observation[]>([]);
   const [task, setTask] = useState<Task>();
   const [loading, setLoading] = useState(false);
 
@@ -337,6 +339,9 @@ export function useReviewData(plan: CarePlan | undefined, reloadKey = 0): {
         setMedications(meds.filter((m): m is MedicationRequest => Boolean(m)));
         setCommunications([...comms]);
         setScores([...obs].filter((o) => o.valueQuantity?.unit === '{score}'));
+        // Per-item answers (valueInteger) drive the "which questions drove the
+        // total?" breakdown; only the newest set for each code is relevant.
+        setItemAnswers([...obs].filter((o) => o.valueInteger !== undefined));
         setTask(tasks[0]);
       })
       .finally(() => !cancelled && setLoading(false));
@@ -344,7 +349,7 @@ export function useReviewData(plan: CarePlan | undefined, reloadKey = 0): {
     return () => { cancelled = true; };
   }, [plan?.id, patientId, reloadKey]);
 
-  return { patient, medications, communications, scores, task, loading };
+  return { patient, medications, communications, scores, itemAnswers, task, loading };
 }
 
 /** Plan rows enriched with the patient name and triage priority. */
@@ -420,6 +425,144 @@ export function usePatientPlans(patientId: string | undefined): {
   }, [patientId]);
 
   return { plans, loading };
+}
+
+/**
+ * Everything the queue needs to triage one plan, gathered per patient.
+ *
+ * A FHIR CarePlan carries the narrative but not the clinical facts a reviewer
+ * ranks on — the score, the safety counts, the panel verdict, the coverage
+ * state. Those live in the artifact Communications and the score Observations,
+ * so the queue reads them once here and every consumer (cards, insights,
+ * preview) works from the same enriched row.
+ */
+export interface EnrichedPlan {
+  plan: CarePlan;
+  patientId?: string;
+  name: string;
+  scoreTotal?: number;
+  priorScores: number[];
+  trendPoints: Array<{ date: string; total: number }>;
+  safetyCritical: number;
+  safetyWarning: number;
+  safetyLines: string[];
+  consensus?: string;
+  panelAgree?: number;
+  panelTotal?: number;
+  medicationCount: number;
+  copayUsd?: number;
+  covered?: boolean;
+  priorAuthRequired?: boolean;
+  recap?: string;
+  conditionText?: string;
+  loaded: boolean;
+}
+
+function parseCoverage(text: string): Pick<EnrichedPlan, 'copayUsd' | 'covered' | 'priorAuthRequired'> {
+  const copay = text.match(/copay:\s*\$?([\d.]+)/i);
+  return {
+    copayUsd: copay ? Number(copay[1]) : undefined,
+    covered: /covered:\s*true/i.test(text) ? true : /covered:\s*false/i.test(text) ? false : undefined,
+    priorAuthRequired: /prior authorisation:\s*true/i.test(text) || /prior authorization:\s*true/i.test(text),
+  };
+}
+
+export function usePlanQueue(plans: CarePlan[]): { rows: EnrichedPlan[]; loading: boolean } {
+  const references = useMemo(() => plans.map((p) => p.subject?.reference), [plans]);
+  const names = usePatientNames(references);
+  const [byPlan, setByPlan] = useState<Map<string, Partial<EnrichedPlan>>>(new Map());
+  const [loading, setLoading] = useState(false);
+  const key = plans.map((p) => p.id).join(',');
+
+  useEffect(() => {
+    if (plans.length === 0) return;
+    let cancelled = false;
+    setLoading(true);
+
+    void Promise.all(
+      plans.map(async (plan) => {
+        const patientId = idFromReference(plan.subject?.reference);
+        if (!patientId || !plan.id) return [plan.id ?? '', {}] as const;
+        try {
+          const [comms, obs] = await Promise.all([
+            medplum.searchResources('Communication', {
+              subject: `Patient/${patientId}`, _sort: '-sent', _count: '100',
+            }),
+            medplum.searchResources('Observation', {
+              subject: `Patient/${patientId}`, status: 'final', _sort: 'date', _count: '60',
+            }),
+          ]);
+
+          const safetyLines = byCategory([...comms], CATEGORIES.safety)
+            .flatMap((c) => communicationText(c).split('\n'))
+            .filter(Boolean);
+          const panel = byCategory([...comms], CATEGORIES.panel);
+          const panelText = panel.map(communicationText).join('\n\n');
+          const coverageText = byCategory([...comms], CATEGORIES.coverage).map(communicationText).join('\n');
+          const recap = byCategory([...comms], CATEGORIES.recap).map(communicationText)[0];
+
+          const totals = [...obs]
+            .filter((o) => o.valueQuantity?.unit === '{score}')
+            .map((o) => ({
+              date: o.effectiveDateTime ?? o.issued ?? '',
+              total: o.valueQuantity?.value ?? 0,
+            }));
+
+          const reviews = panelText.split('\n\n').filter(Boolean);
+          const agree = reviews.filter((r) => /—\s*(agree|approve)/i.test(r.split('\n')[0] ?? '')).length;
+          const consensusRaw = panel[0]?.topic?.text?.split(/[—-]/).slice(1).join('-').trim().toLowerCase();
+
+          return [
+            plan.id,
+            {
+              patientId,
+              scoreTotal: totals[totals.length - 1]?.total,
+              priorScores: totals.slice(0, -1).map((t) => t.total),
+              trendPoints: totals,
+              safetyCritical: safetyLines.filter((l) => /\[critical\]/i.test(l)).length,
+              safetyWarning: safetyLines.filter((l) => /\[warning\]/i.test(l)).length,
+              safetyLines,
+              consensus: consensusRaw || undefined,
+              panelAgree: reviews.length ? agree : undefined,
+              panelTotal: reviews.length || undefined,
+              recap,
+              ...parseCoverage(coverageText),
+              loaded: true,
+            } as Partial<EnrichedPlan>,
+          ] as const;
+        } catch {
+          return [plan.id, {}] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setByPlan(new Map(entries));
+      setLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [key]);
+
+  const rows = plans.map((plan) => {
+    const extra = byPlan.get(plan.id ?? '') ?? {};
+    return {
+      plan,
+      name: names.get(plan.subject?.reference ?? '') ?? 'Loading…',
+      conditionText: plan.title,
+      medicationCount: (plan.activity ?? []).filter((a) =>
+        a.reference?.reference?.startsWith('MedicationRequest/'),
+      ).length,
+      priorScores: [],
+      trendPoints: [],
+      safetyCritical: 0,
+      safetyWarning: 0,
+      safetyLines: [],
+      loaded: false,
+      ...extra,
+    } as EnrichedPlan;
+  });
+
+  return { rows, loading };
 }
 
 export async function saveMedication(request: MedicationRequest): Promise<MedicationRequest> {

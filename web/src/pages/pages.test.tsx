@@ -94,7 +94,7 @@ describe('every page renders', () => {
   it('Review with a selected plan shows the panels', async () => {
     render(<ReviewPage plans={[plan]} selected={plan} onSelect={vi.fn()} onChanged={vi.fn()} />);
     for (const panel of [
-      'Score trend',
+      'Asthma Control Test',
       'Drafted regimen',
       'Safety and risk',
       'Evidence',

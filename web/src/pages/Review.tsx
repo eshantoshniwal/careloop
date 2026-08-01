@@ -15,6 +15,9 @@ import {
   type Priority,
 } from '../data';
 import { Trend } from '../components/Trend';
+import { BandMeter, ItemBreakdown, ScoreTrendChart } from '../clinical/charts';
+import { scaleForText } from '../clinical/scale';
+import { instrumentMeta, linkIdForLoinc } from '../clinical/items';
 import { Avatar, Badge, Card, Chip, Empty, Icon, MetricStrip, Skeleton, clockTime, relativeTime, type Tone } from '../ui';
 
 const PRIORITY_RANK: Record<Priority, number> = { critical: 0, urgent: 1, routine: 2 };
@@ -141,6 +144,7 @@ export function ReviewPage({
   loading,
   selected,
   onSelect,
+  onBack,
   onChanged,
   onOpenLive,
 }: {
@@ -148,6 +152,7 @@ export function ReviewPage({
   loading?: boolean;
   selected?: CarePlan;
   onSelect: (plan: CarePlan) => void;
+  onBack?: () => void;
   onChanged: () => void;
   onOpenLive?: (patientId: string) => void;
 }): JSX.Element {
@@ -169,7 +174,7 @@ export function ReviewPage({
   const shownSummaries = ranked.filter((s) => filter === 'all' || s.priority === filter);
   const plan = selected ?? ranked[0]?.plan ?? plans[0];
 
-  const { patient, medications, communications, scores, task } = useReviewData(plan, reloadKey);
+  const { patient, medications, communications, scores, itemAnswers, task } = useReviewData(plan, reloadKey);
   const patientId = idFromReference(plan?.subject?.reference);
   const patientPhone = patient?.telecom?.find((t) => t.system === 'phone')?.value;
 
@@ -195,6 +200,36 @@ export function ReviewPage({
   }));
   const trendMax = Math.max(25, ...trendPoints.map((p) => p.total));
   const latestScore = trendPoints[trendPoints.length - 1]?.total;
+
+  const scale = scaleForText(plan?.title);
+  const meta = instrumentMeta(scale.instrument);
+
+  // Newest answer per question, worst-scoring first — what drove the total.
+  const breakdown = (() => {
+    if (!meta) return [];
+    const newest = new Map<string, number>();
+    for (const obs of [...itemAnswers].sort((a, b) =>
+      (b.effectiveDateTime ?? '').localeCompare(a.effectiveDateTime ?? ''),
+    )) {
+      const linkId = linkIdForLoinc(obs.code?.coding?.[0]?.code);
+      if (linkId && !newest.has(linkId) && obs.valueInteger !== undefined) {
+        newest.set(linkId, obs.valueInteger);
+      }
+    }
+    return meta.items
+      .filter((item) => newest.has(item.linkId))
+      .map((item) => ({
+        linkId: item.linkId,
+        label: item.short,
+        prompt: `${item.prompt}\n${item.scale}`,
+        value: newest.get(item.linkId)!,
+        min: item.min,
+        max: item.max,
+      }))
+      .sort((a, b) =>
+        meta.higherIsBetter ? a.value - b.value : b.value - a.value,
+      );
+  })();
 
   async function onApprove(): Promise<void> {
     if (!plan?.id) return;
@@ -227,8 +262,13 @@ export function ReviewPage({
   return (
     <>
       <header className="page-head">
-        <div>
-          <h1>Review queue</h1>
+        {onBack && (
+          <button className="btn ghost" onClick={onBack} aria-label="Back to the review queue">
+            {Icon.chevronLeft()} Review queue
+          </button>
+        )}
+        <div style={{ marginLeft: onBack ? 4 : 0 }}>
+          <h1>Review</h1>
           <p className="sub">
             {plans.length} draft plan{plans.length === 1 ? '' : 's'} awaiting a clinician.
           </p>
@@ -326,9 +366,30 @@ export function ReviewPage({
               {/* The plan is one view of a patient, not an island — these are
                   the other two, so the reviewer never has to navigate by
                   memorising an id. */}
+              <dl className="factgrid">
+                <div>
+                  <dt>Age / sex</dt>
+                  <dd>
+                    {patient?.birthDate
+                      ? `${Math.floor((Date.now() - new Date(patient.birthDate).getTime()) / 31557600000)} yrs`
+                      : '—'}
+                    {patient?.gender ? ` · ${patient.gender}` : ''}
+                  </dd>
+                </div>
+                <div><dt>Date of birth</dt><dd>{patient?.birthDate ?? '—'}</dd></div>
+                <div>
+                  <dt>Phone</dt>
+                  <dd>{patientPhone ?? 'none on file'}</dd>
+                </div>
+                <div>
+                  <dt>Coverage</dt>
+                  <dd>{coverage.length > 0 ? (coverage[0]!.match(/Plan:\s*(.+)/)?.[1] ?? 'on file') : '—'}</dd>
+                </div>
+              </dl>
+
               <div className="pills" style={{ marginTop: 14 }}>
                 {latestScore !== undefined && (
-                  <span className="pill">{Icon.trend()} ACT {latestScore}/25</span>
+                  <span className="pill">{Icon.trend()} {scale.instrument} {latestScore}/{scale.max}</span>
                 )}
                 <span className="pill">{medications.length} drafted order{medications.length === 1 ? '' : 's'}</span>
                 {safetyLines.length > 0 && (
@@ -369,10 +430,30 @@ export function ReviewPage({
               ) : null}
             </Card>
 
-            {/* 2 — trend */}
-            <Card title="Score trend" subtitle="Finalised total scores over time" padded>
-              <Trend points={trendPoints} min={0} max={trendMax} higherIsBetter={trendMax <= 25} />
+            {/* 2 — where the score sits, and how it got there */}
+            <Card title={scale.instrumentLong} subtitle="Where this score sits on the instrument" padded>
+              {latestScore !== undefined ? (
+                <>
+                  <BandMeter scale={scale} total={latestScore} showTicks />
+                  <div style={{ marginTop: 20 }}>
+                    <ScoreTrendChart points={trendPoints} scale={scale} />
+                  </div>
+                </>
+              ) : (
+                <Trend points={trendPoints} min={0} max={trendMax} higherIsBetter={trendMax <= 25} />
+              )}
             </Card>
+
+            {/* 3 — which questions drove the total */}
+            {breakdown.length > 0 && (
+              <Card
+                title={`${scale.instrument} item breakdown`}
+                subtitle="Worst-scoring items first — what's driving the total"
+                padded
+              >
+                <ItemBreakdown items={breakdown} />
+              </Card>
+            )}
 
             {/* 3 — safety and risk */}
             <Card title="Safety and risk" subtitle={`${safetyLines.length} finding${safetyLines.length === 1 ? '' : 's'}`}>
