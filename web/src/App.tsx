@@ -7,13 +7,14 @@ import { CallsPage } from './pages/Calls';
 import { DashboardPage } from './pages/Dashboard';
 import { IntakePage } from './pages/Intake';
 import { LivePage } from './pages/Live';
+import { PatientPage } from './pages/Patient';
 import { PatientsPage } from './pages/Patients';
 import { ReviewPage } from './pages/Review';
 import { TreatmentsPage } from './pages/Treatments';
 import { medplum, signOut } from './medplum';
 import { Avatar, Icon, applyTheme, readTheme, resolvedTheme, type Theme } from './ui';
 
-export type Route = 'dashboard' | 'live' | 'review' | 'calls' | 'patients' | 'intake' | 'treatments';
+export type Route = 'dashboard' | 'live' | 'review' | 'calls' | 'patients' | 'intake' | 'treatments' | 'patient';
 
 const NAV: Array<{ route: Route; label: string; icon: () => JSX.Element }> = [
   { route: 'dashboard', label: 'Dashboard', icon: Icon.home },
@@ -45,6 +46,7 @@ export function App(): JSX.Element {
   const [route, setRoute] = useState<Route>('dashboard');
   const [selectedPlan, setSelectedPlan] = useState<CarePlan>();
   const [livePatientId, setLivePatientId] = useState<string>();
+  const [detailPatientId, setDetailPatientId] = useState<string>();
   const [health, setHealth] = useState<BridgeHealth>();
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [navOpen, setNavOpen] = useState(false);
@@ -86,6 +88,11 @@ export function App(): JSX.Element {
   function openLive(patientId: string): void {
     setLivePatientId(patientId);
     go('live');
+  }
+
+  function openPatient(patientId: string): void {
+    setDetailPatientId(patientId);
+    go('patient');
   }
 
   const isDark = resolvedTheme(theme) === 'dark';
@@ -166,6 +173,7 @@ export function App(): JSX.Element {
               loading={loading}
               patients={patients}
               onOpenPlan={openPlan}
+              onOpenPatient={openPatient}
               onNavigate={go}
             />
           )}
@@ -179,10 +187,22 @@ export function App(): JSX.Element {
               selected={selectedPlan}
               onSelect={setSelectedPlan}
               onChanged={refresh}
+              onOpenLive={openLive}
             />
           )}
-          {route === 'calls' && <CallsPage onOpenLive={openLive} />}
-          {route === 'patients' && <PatientsPage patients={patients} onOpenLive={openLive} />}
+          {route === 'calls' && <CallsPage onOpenPatient={openPatient} />}
+          {route === 'patients' && (
+            <PatientsPage patients={patients} onOpenLive={openLive} onOpenPatient={openPatient} />
+          )}
+          {route === 'patient' && detailPatientId && (
+            <PatientPage
+              patientId={detailPatientId}
+              patients={patients}
+              onOpenPlan={openPlan}
+              onOpenLive={openLive}
+              onBack={() => go('patients')}
+            />
+          )}
           {route === 'intake' && <IntakePage onCallStarted={openLive} />}
           {route === 'treatments' && <TreatmentsPage />}
         </div>

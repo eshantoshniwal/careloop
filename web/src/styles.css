@@ -340,6 +340,18 @@ a { color: var(--brand); }
 .row.selected { background: var(--brand-bg); }
 .row.selected .chev { color: var(--brand); }
 
+/* A clickable name area inside a row that also carries its own action buttons,
+   so the whole record opens without nesting one button inside another. */
+.row-open {
+  display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0;
+  background: none; border: 0; padding: 0; margin: -13px 0; padding: 13px 0;
+  font: inherit; text-align: left; color: inherit; cursor: pointer;
+}
+.row-open .grow { flex: 1; min-width: 0; }
+.row-open .name { font-weight: 600; display: block; }
+.row-open .meta { font-size: 13px; color: var(--muted); margin-top: 2px; display: block; }
+.row-open:hover .name { color: var(--brand); }
+
 .empty { padding: 40px 24px; text-align: center; color: var(--muted); font-size: 14px; }
 .empty strong { display: block; color: var(--ink-2); font-size: 15px; margin-bottom: 6px; }
 
@@ -383,6 +395,18 @@ button.btn.primary:hover:not(:disabled) { background: var(--brand-ink); }
 button.btn.danger { background: var(--critical); border-color: var(--critical); color: #fff; }
 button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
 button.link { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--brand); cursor: pointer; }
+button.btn.ghost { border-color: transparent; background: none; color: var(--ink-2); padding-left: 10px; padding-right: 12px; }
+button.btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+
+/* Key/value facts on the patient hub — a compact record summary. */
+.kv { margin: 18px 0 0; display: grid; gap: 0; }
+.kv > div {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 9px 0; border-bottom: 1px solid var(--line);
+}
+.kv > div:last-child { border-bottom: 0; }
+.kv dt { font-size: 13px; color: var(--muted); }
+.kv dd { font-size: 13px; font-weight: 600; color: var(--ink); text-align: right; min-width: 0; overflow-wrap: anywhere; }
 
 /* --------------------------------------------------------------- modal */
 

@@ -209,6 +209,7 @@ export const Icon = {
   shield: (p = S) => (<svg {...p}><path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6z" /></svg>),
   inbox: (p = S) => (<svg {...p}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 13h5l1.5 2.5h5L16 13h5" /></svg>),
   chevron: (p = { ...S, width: 16, height: 16 }) => (<svg {...p}><path d="m9 6 6 6-6 6" /></svg>),
+  chevronLeft: (p = { ...S, width: 16, height: 16 }) => (<svg {...p}><path d="m15 6-6 6 6 6" /></svg>),
   arrowRight: (p = { ...S, width: 16, height: 16 }) => (<svg {...p}><path d="M5 12h14M13 6l6 6-6 6" /></svg>),
   logout: (p = { ...S, width: 17, height: 17 }) => (<svg {...p}><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" /><path d="M10 12H3M6 8l-3 4 3 4" /></svg>),
   check: (p = { ...S, width: 15, height: 15 }) => (<svg {...p}><path d="M20 6 9 17l-5-5" /></svg>),

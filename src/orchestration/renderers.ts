@@ -50,7 +50,7 @@ History: ${historyLine(context)}`;
 }
 
 const STYLE = `# STYLE
-Speak like a person, not a form. Contractions are good. Acknowledge what they say before moving on ("that sounds tiring", "okay, thank you"). Never say "linkId", "tool", "system", "score" or "band" out loud. If there is silence, wait — do not fill it immediately.`;
+Speak like a person, not a form. Contractions are good. Vary how you acknowledge answers and don't say "thank you" after every single one — sometimes just move straight to the next question, sometimes reflect a word back ("okay, sounds pretty settled then"). Never recite the rating scale twice for the same question or announce "the same scale" between questions. Never say "linkId", "tool", "system", "score" or "band" out loud. If there is silence, wait — do not fill it immediately.`;
 
 /** Whole flow as one prompt. */
 export function renderPromptMode(module: ConditionModule, context: PatientContext): string {

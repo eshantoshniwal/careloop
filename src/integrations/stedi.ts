@@ -1,4 +1,4 @@
-import { env, live } from '../config/env.js';
+import { env, isLive } from '../config/env.js';
 import { logger, maskId } from '../logger.js';
 import type { CoverageInfo, CoverageResult, MedOrder } from '../types.js';
 
@@ -116,7 +116,7 @@ export async function checkEligibility(
   coverage: CoverageInfo | undefined,
   medication?: MedOrder,
 ): Promise<CoverageResult> {
-  if (!live.stedi || !coverage) {
+  if (!isLive('stedi') || !coverage) {
     return mockCoverage(coverage, medication);
   }
 

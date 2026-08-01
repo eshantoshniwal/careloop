@@ -1,4 +1,4 @@
-import { env, live } from '../config/env.js';
+import { env, isLive } from '../config/env.js';
 import { logger } from '../logger.js';
 
 /**
@@ -76,7 +76,7 @@ async function callAnthropic(request: LlmRequest): Promise<string> {
 }
 
 export async function complete(request: LlmRequest): Promise<LlmResult> {
-  if (!live.llm) {
+  if (!isLive('llm')) {
     return { text: '', live: false };
   }
   try {

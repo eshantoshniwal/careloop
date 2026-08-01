@@ -35,5 +35,8 @@ export function buildAgentPrompt(input: {
 
 export function buildGreeting(context: PatientContext): string {
   const firstName = context.fullName.split(' ')[0] ?? 'there';
-  return `Hi, is this ${firstName}? This is Maya calling from the clinic — is now an okay time for a quick check-in before your appointment?`;
+  // Beat one only: confirm we have the right person before saying anything
+  // else. The purpose introduction and the "is now a good time?" check follow
+  // in the greeting flow node once identity is confirmed.
+  return `Hi there — is this ${firstName}?`;
 }

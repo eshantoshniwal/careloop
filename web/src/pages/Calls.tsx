@@ -1,7 +1,11 @@
 import { useCalls, usePatientNames, idFromReference } from '../data';
 import { Avatar, Badge, Card, Empty, Icon, relativeTime } from '../ui';
 
-export function CallsPage({ onOpenLive }: { onOpenLive: (patientId: string) => void }): JSX.Element {
+export function CallsPage({
+  onOpenPatient,
+}: {
+  onOpenPatient: (patientId: string) => void;
+}): JSX.Element {
   const calls = useCalls();
   const names = usePatientNames(calls.map((c) => c.patientReference));
 
@@ -27,7 +31,8 @@ export function CallsPage({ onOpenLive }: { onOpenLive: (patientId: string) => v
               <button
                 key={call.id}
                 className="row"
-                onClick={() => patientId && onOpenLive(patientId)}
+                onClick={() => patientId && onOpenPatient(patientId)}
+                title={`Open ${name}'s record`}
               >
                 <Avatar name={name} small />
                 <span className="grow">

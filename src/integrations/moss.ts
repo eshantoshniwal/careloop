@@ -1,4 +1,4 @@
-import { env, live } from '../config/env.js';
+import { env, isLive } from '../config/env.js';
 import { logger } from '../logger.js';
 import type { MossCorpusEntry } from '../conditions/types.js';
 import type { RetrievalSnippet } from '../types.js';
@@ -176,8 +176,8 @@ function liveClient(config: MossIndexConfig): MossClient {
 export function getMossClient(config: MossIndexConfig): MossClient {
   const cached = clients.get(config.indexName);
   if (cached) return cached;
-  const client = live.moss ? liveClient(config) : mockClient(config);
-  if (!live.moss) {
+  const client = isLive('moss') ? liveClient(config) : mockClient(config);
+  if (!isLive('moss')) {
     logger.debug({ index: config.indexName }, 'moss.mock.enabled');
   }
   clients.set(config.indexName, client);
@@ -189,7 +189,7 @@ export function getMossClient(config: MossIndexConfig): MossClient {
  * so an existing index is updated in place with an upsert instead.
  */
 export async function indexCorpus(config: MossIndexConfig): Promise<'created' | 'updated' | 'skipped'> {
-  if (!live.moss) {
+  if (!isLive('moss')) {
     logger.warn({ index: config.indexName }, 'moss.index.skipped.no-credentials');
     return 'skipped';
   }

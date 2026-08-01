@@ -1,6 +1,6 @@
 import type { CarePlan, Patient } from '@medplum/fhirtypes';
 import type { Route } from '../App';
-import { useCalls, usePatientNames, usePlanSummaries, type Priority } from '../data';
+import { idFromReference, useCalls, usePatientNames, usePlanSummaries, type Priority } from '../data';
 import { Avatar, Badge, Card, Empty, Icon, Skeleton, Stat, relativeTime } from '../ui';
 
 const PRIORITY_RANK: Record<Priority, number> = { critical: 0, urgent: 1, routine: 2 };
@@ -17,12 +17,14 @@ export function DashboardPage({
   loading,
   patients,
   onOpenPlan,
+  onOpenPatient,
   onNavigate,
 }: {
   plans: CarePlan[];
   loading?: boolean;
   patients: Patient[];
   onOpenPlan: (plan: CarePlan) => void;
+  onOpenPatient: (patientId: string) => void;
   onNavigate: (route: Route) => void;
 }): JSX.Element {
   const summaries = usePlanSummaries(plans);
@@ -167,8 +169,14 @@ export function DashboardPage({
           ) : (
             calls.slice(0, 5).map((call) => {
               const name = callNames.get(call.patientReference ?? '') ?? 'Unknown patient';
+              const patientId = idFromReference(call.patientReference);
               return (
-                <div key={call.id} className="row" style={{ cursor: 'default' }}>
+                <button
+                  key={call.id}
+                  className="row"
+                  onClick={() => patientId && onOpenPatient(patientId)}
+                  title={`Open ${name}'s record`}
+                >
                   <Avatar name={name} small />
                   <span className="grow">
                     <span className="name">{name}</span>
@@ -181,7 +189,8 @@ export function DashboardPage({
                   <span className="small muted" style={{ marginLeft: 10 }}>
                     {relativeTime(call.when)}
                   </span>
-                </div>
+                  <span className="chev">{Icon.arrowRight()}</span>
+                </button>
               );
             })
           )}

@@ -1,5 +1,5 @@
 import twilio from 'twilio';
-import { env, live, publicBaseUrl, publicWsUrl } from '../config/env.js';
+import { env, isLive, publicBaseUrl, publicWsUrl } from '../config/env.js';
 import { logger } from '../logger.js';
 
 let client: ReturnType<typeof twilio> | undefined;
@@ -17,7 +17,7 @@ export interface PlacedCall {
 }
 
 export async function placeOutboundCall(to: string, callId: string): Promise<PlacedCall> {
-  if (!live.twilio) {
+  if (!isLive('twilio')) {
     logger.warn({ callId }, 'twilio.mock.call');
     return { callSid: `mock-call-${callId}`, mock: true };
   }
@@ -105,7 +105,7 @@ export function validateTwilioSignature(
   url: string,
   params: Record<string, unknown>,
 ): boolean {
-  if (!live.twilio) return true;
+  if (!isLive('twilio')) return true;
   if (!signature) return false;
   return twilio.validateRequest(env.twilio.authToken, signature, url, params as never);
 }

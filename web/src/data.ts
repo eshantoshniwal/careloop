@@ -370,6 +370,42 @@ export function usePlanSummaries(plans: CarePlan[]): Array<{
   }));
 }
 
+/**
+ * Every care plan for one patient, newest first.
+ *
+ * The patient hub needs both drafts and active plans in one place, so unlike
+ * `useDraftPlans` this is not filtered by status — the caller decides how to
+ * group them.
+ */
+export function usePatientPlans(patientId: string | undefined): {
+  plans: CarePlan[];
+  loading: boolean;
+} {
+  const [plans, setPlans] = useState<CarePlan[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!patientId) {
+      setPlans([]);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    medplum
+      .searchResources('CarePlan', {
+        subject: `Patient/${patientId}`,
+        _sort: '-_lastUpdated',
+        _count: '50',
+      })
+      .then((results) => !cancelled && setPlans([...results]))
+      .catch(() => undefined)
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [patientId]);
+
+  return { plans, loading };
+}
+
 export async function saveMedication(request: MedicationRequest): Promise<MedicationRequest> {
   return medplum.updateResource(request);
 }

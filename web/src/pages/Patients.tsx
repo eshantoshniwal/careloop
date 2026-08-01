@@ -7,9 +7,11 @@ import { Avatar, Badge, Card, Empty, Icon, relativeTime } from '../ui';
 export function PatientsPage({
   patients,
   onOpenLive,
+  onOpenPatient,
 }: {
   patients: Patient[];
   onOpenLive: (patientId: string) => void;
+  onOpenPatient: (patientId: string) => void;
 }): JSX.Element {
   const [query, setQuery] = useState('');
   const [target, setTarget] = useState<CallTarget>();
@@ -61,14 +63,20 @@ export function PatientsPage({
             const phone = patient.telecom?.find((t) => t.system === 'phone')?.value;
             return (
               <div key={patient.id} className="row" style={{ cursor: 'default' }}>
-                <Avatar name={name} />
-                <span className="grow">
-                  <span className="name">{name}</span>
-                  <span className="meta">
-                    {patient.birthDate ? `DOB ${patient.birthDate}` : 'No DOB'}
-                    {phone ? ` · ${phone}` : ' · no phone'}
+                <button
+                  className="row-open"
+                  onClick={() => patient.id && onOpenPatient(patient.id)}
+                  title={`Open ${name}'s record`}
+                >
+                  <Avatar name={name} />
+                  <span className="grow">
+                    <span className="name">{name}</span>
+                    <span className="meta">
+                      {patient.birthDate ? `DOB ${patient.birthDate}` : 'No DOB'}
+                      {phone ? ` · ${phone}` : ' · no phone'}
+                    </span>
                   </span>
-                </span>
+                </button>
                 {patient.meta?.lastUpdated && (
                   <span className="small muted">{relativeTime(patient.meta.lastUpdated)}</span>
                 )}
@@ -83,8 +91,12 @@ export function PatientsPage({
                 >
                   {Icon.phone()} Call
                 </button>
-                <button className="btn" onClick={() => patient.id && onOpenLive(patient.id)}>
-                  Live
+                <button
+                  className="btn"
+                  onClick={() => patient.id && onOpenLive(patient.id)}
+                  title="Live charting feed"
+                >
+                  {Icon.live()} Live
                 </button>
               </div>
             );

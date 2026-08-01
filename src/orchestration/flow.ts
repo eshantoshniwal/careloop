@@ -62,7 +62,7 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   nodes.push({
     id: 'greeting',
     kind: 'greeting',
-    say: "Introduce yourself as Maya calling from the clinic about {{firstName}}'s upcoming appointment for their {{conditionLower}}. Ask if now is a good time. If it is not, offer to call back and end the call.",
+    say: "You have already opened by asking if this is {{firstName}}. Once they confirm it is them, introduce yourself in one or two sentences: you are Maya, a check-in assistant calling on behalf of their clinic about their upcoming appointment, and this is a quick pre-visit check-in so their doctor can prepare their care plan before they come in. Then ask if now is a good time. If it is not, offer to call back and end the call. If the person says it is NOT {{firstName}} or a wrong number, apologize briefly and end — do not share any details.",
     tools: [],
     next: 'verify',
   });
@@ -70,16 +70,24 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   nodes.push({
     id: 'verify',
     kind: 'verify',
-    say: 'Ask the patient to confirm their date of birth. Do not read it out to them — ask them for it. Accept spoken formats such as "March fourteenth eighty-five". If it does not match, do not continue with clinical questions: say the clinic will call back, and end warmly.',
+    say: 'Before any clinical questions, verify identity: ask the patient for their date of birth. Do not read it out to them — ask them to tell you. Accept spoken formats such as "March fourteenth, nineteen eighty-five". If the first answer does not match or is unclear, gently ask them to say it once more — give them TWO tries. Only if it still does not match after the second try, say the clinic will follow up directly and end warmly. Never end on the very first mismatch.',
     tools: [],
     next: itemIds[0] ?? 'concerns',
   });
 
   for (const [index, item] of module.instrument.items.entries()) {
+    const isFirst = index === 0;
+    const intro = isFirst
+      ? `This is the first of ${module.instrument.items.length} quick rating questions. Once, and only here, tell the patient briefly that for these you'll ask them to answer with a number from ${item.min} to ${item.max}. Then ask: `
+      : 'Ask: ';
+    const say =
+      `${intro}"${item.prompt}" In the SAME sentence, weave in the two ends naturally (${item.scaleHint}) — one short sentence, not a separate recital. ` +
+      `Do NOT say phrases like "on a scale from ${item.min} to ${item.max}" or "using the same scale" again — you already framed it; just ask the question with its two ends. ` +
+      `After they answer, call chartLive with linkId "${item.linkId}" and the number ${item.min}-${item.max}. If they describe rather than give a number (e.g. "not at all", "all the time"), map it to the closest number and briefly confirm what you recorded. Only restate the two ends if their answer is not clearly one of the numbers.`;
     nodes.push({
       id: `item:${item.linkId}`,
       kind: 'instrument-item',
-      say: `Ask exactly: "${item.prompt}" The scale is ${item.min} to ${item.max}; ${item.scaleHint}. After they answer, call chartLive with linkId "${item.linkId}" and the number. If they describe rather than score, map it to the closest number and read back what you recorded.`,
+      say,
       tools: ['chartLive', ...QA_TOOLS],
       next: itemIds[index + 1] ?? afterItems,
       meta: { linkId: item.linkId, min: item.min, max: item.max },

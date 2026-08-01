@@ -1,12 +1,14 @@
 import type { CarePlan, MedicationRequest } from '@medplum/fhirtypes';
 import { useState } from 'react';
 import { approve } from '../bridge';
+import { CallDialog, type CallTarget } from '../components/CallDialog';
 import {
   CATEGORIES,
   byCategory,
   communicationText,
   displayName,
   hasCriticalFlag,
+  idFromReference,
   saveMedication,
   useReviewData,
   usePlanSummaries,
@@ -97,12 +99,14 @@ export function ReviewPage({
   selected,
   onSelect,
   onChanged,
+  onOpenLive,
 }: {
   plans: CarePlan[];
   loading?: boolean;
   selected?: CarePlan;
   onSelect: (plan: CarePlan) => void;
   onChanged: () => void;
+  onOpenLive?: (patientId: string) => void;
 }): JSX.Element {
   const summaries = usePlanSummaries(plans);
   const plan = selected ?? plans[0];
@@ -110,8 +114,11 @@ export function ReviewPage({
   const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string }>();
+  const [callTarget, setCallTarget] = useState<CallTarget>();
 
   const { patient, medications, communications, scores, task } = useReviewData(plan, reloadKey);
+  const patientId = idFromReference(plan?.subject?.reference);
+  const patientPhone = patient?.telecom?.find((t) => t.system === 'phone')?.value;
 
   const critical = hasCriticalFlag(communications);
   const isDraft = plan?.status === 'draft';
@@ -171,6 +178,14 @@ export function ReviewPage({
         </div>
       </header>
 
+      {callTarget && (
+        <CallDialog
+          target={callTarget}
+          onClose={() => setCallTarget(undefined)}
+          onStarted={(id) => onOpenLive?.(id)}
+        />
+      )}
+
       <div className="grid-review">
         <Card title="Drafts" subtitle="Worst first">
           {loading && summaries.length === 0 ? (
@@ -219,6 +234,25 @@ export function ReviewPage({
                 <Badge tone={isDraft ? 'routine' : 'ok'}>{plan.status}</Badge>
                 {task?.priority === 'urgent' && <Badge tone="urgent">urgent task</Badge>}
               </div>
+
+              {/* The plan is one view of a patient, not an island — these are
+                  the other two, so the reviewer never has to navigate by
+                  memorising an id. */}
+              {patientId && (
+                <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
+                  <button className="btn" onClick={() => onOpenLive?.(patientId)}>
+                    {Icon.live()} Charting feed
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={!patientPhone}
+                    title={patientPhone ? `Call ${patientName}` : 'No phone number on file'}
+                    onClick={() => setCallTarget({ patientId, name: patientName, phone: patientPhone })}
+                  >
+                    {Icon.phone()} Call again
+                  </button>
+                </div>
+              )}
               <p style={{ marginTop: 16, fontWeight: 600 }}>{plan.title}</p>
               <p className="muted" style={{ marginTop: 6 }}>{plan.description}</p>
               {plan.note?.map((note, i) => (

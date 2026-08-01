@@ -1,6 +1,6 @@
 import { MedplumClient } from '@medplum/core';
 import type { Bundle, Resource, ResourceType } from '@medplum/fhirtypes';
-import { env, live } from '../config/env.js';
+import { env, isLive } from '../config/env.js';
 import { logger } from '../logger.js';
 
 /**
@@ -71,10 +71,10 @@ export function clearMockStore(): void {
 // Public repository API
 // ---------------------------------------------------------------------------
 
-export const usingLiveMedplum = (): boolean => live.medplum;
+export const usingLiveMedplum = (): boolean => isLive('medplum');
 
 export async function createResource<T extends Resource>(resource: T): Promise<T> {
-  if (!live.medplum) {
+  if (!isLive('medplum')) {
     const id = resource.id ?? nextId();
     const stored = { ...resource, id, meta: { ...resource.meta, versionId: '1' } } as T;
     memory.set(memoryKey(resource.resourceType, id), stored);
@@ -86,7 +86,7 @@ export async function createResource<T extends Resource>(resource: T): Promise<T
 }
 
 export async function updateResource<T extends Resource>(resource: T): Promise<T> {
-  if (!live.medplum) {
+  if (!isLive('medplum')) {
     if (!resource.id) throw new Error('updateResource requires an id');
     memory.set(memoryKey(resource.resourceType, resource.id), resource);
     return resource;
@@ -99,7 +99,7 @@ export async function readResource<T extends Resource>(
   resourceType: ResourceType,
   id: string,
 ): Promise<T | undefined> {
-  if (!live.medplum) {
+  if (!isLive('medplum')) {
     return memory.get(memoryKey(resourceType, id)) as T | undefined;
   }
   const client = await getClient();
@@ -115,7 +115,7 @@ export async function searchResources<T extends Resource>(
   resourceType: ResourceType,
   query: Record<string, string> = {},
 ): Promise<T[]> {
-  if (!live.medplum) {
+  if (!isLive('medplum')) {
     return [...memory.values()].filter(
       (resource) => resource.resourceType === resourceType && matchesQuery(resource, query),
     ) as T[];
@@ -131,7 +131,7 @@ export async function searchResources<T extends Resource>(
 }
 
 export async function executeBatch(bundle: Bundle): Promise<Bundle> {
-  if (!live.medplum) {
+  if (!isLive('medplum')) {
     const entries = bundle.entry ?? [];
     const responses = [];
     for (const entry of entries) {
@@ -171,7 +171,7 @@ export async function bestEffortCreate<T extends Resource>(
  * — callers keep the seed display rather than blocking the draft.
  */
 export async function validateMedicationCode(code: string): Promise<string | undefined> {
-  if (!live.medplum) return undefined;
+  if (!isLive('medplum')) return undefined;
   try {
     const client = await getClient();
     const result = (await client.post('fhir/R4/CodeSystem/$lookup', {

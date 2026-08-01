@@ -85,6 +85,9 @@ export const env = {
  * Every integration has a live path and a labelled mock path. These flags are
  * the single place that decides which one runs, so telemetry can always say
  * whether a result came from a real external system.
+ *
+ * Read them through `isLive()`, not directly: `goOffline()` has to be able to
+ * force every integration to its mock at once.
  */
 export const live = {
   medplum: Boolean(env.medplum.clientId && env.medplum.clientSecret),
@@ -96,6 +99,30 @@ export const live = {
     (env.llm.provider === 'groq' && Boolean(env.llm.groqApiKey)) ||
     (env.llm.provider === 'anthropic' && Boolean(env.llm.anthropicApiKey)),
 } as const;
+
+/**
+ * Global offline switch.
+ *
+ * `npm run simulate` is documented as a complete pipeline with zero
+ * credentials. Left to the per-integration flags it silently used whatever
+ * happened to be configured — writing fixture patients to a real FHIR server
+ * and spending real Stedi and LLM calls on a synthetic scenario. The
+ * simulation opts out of every live path explicitly, rather than depending on
+ * whoever runs it having an empty `.env`.
+ */
+let offline = false;
+
+export function goOffline(): void {
+  offline = true;
+}
+
+export function isOffline(): boolean {
+  return offline;
+}
+
+export function isLive(integration: keyof typeof live): boolean {
+  return !offline && live[integration];
+}
 
 export function publicBaseUrl(): string {
   return env.publicHost ? `https://${env.publicHost}` : `http://localhost:${env.port}`;

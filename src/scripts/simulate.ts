@@ -11,7 +11,7 @@
  *   npm run simulate depression # PHQ-9 with the crisis item endorsed
  */
 
-import './quiet.js';
+import './offline.js';
 import { getModule } from '../conditions/registry.js';
 import { clearMockStore, createResource, mockStoreSnapshot } from '../integrations/medplum.js';
 import { buildIntakeFlow } from '../orchestration/flow.js';

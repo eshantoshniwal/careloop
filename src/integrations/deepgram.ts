@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import WebSocket from 'ws';
-import { env, live } from '../config/env.js';
+import { env, isLive } from '../config/env.js';
 import { logger } from '../logger.js';
 
 /**
@@ -66,7 +66,7 @@ export class DeepgramAgent extends EventEmitter {
   }
 
   connect(): void {
-    if (!live.deepgram) {
+    if (!isLive('deepgram')) {
       logger.warn('deepgram.mock.enabled — no voice agent socket will be opened');
       queueMicrotask(() => this.emit('open'));
       return;
