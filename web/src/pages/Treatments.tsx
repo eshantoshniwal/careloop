@@ -1,27 +1,98 @@
 import { useEffect, useState } from 'react';
-import { getModules, type ModuleSummary } from '../bridge';
+import {
+  getCondition,
+  getModules,
+  reloadConditions,
+  saveCondition,
+  type ModuleSummary,
+} from '../bridge';
 import { Badge, Card, Empty, Icon } from '../ui';
 
 /**
  * Treatments admin.
  *
- * Read-only for now: the bridge exposes the registry through `GET /modules`,
- * but authoring a condition still means adding a module file. The page states
- * that plainly rather than showing disabled controls that imply otherwise.
+ * A condition module is the entire extension point for a new treatment, so it
+ * has to be editable without a deploy. Saving writes a FHIR PlanDefinition and
+ * hot-reloads the bridge registry — the next call uses the new flow.
+ *
+ * The editor is raw JSON on purpose. A module carries RxNorm-coded orders and
+ * band thresholds; a form that silently coerces those would be more dangerous
+ * than a text area that fails loudly against the server's validator.
  */
 export function TreatmentsPage(): JSX.Element {
   const [modules, setModules] = useState<ModuleSummary[]>([]);
-  const [error, setError] = useState<string>();
   const [selected, setSelected] = useState<string>();
+  const [draft, setDraft] = useState('');
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'ok' | 'error' | 'info'; text: string }>();
+
+  async function refreshList(): Promise<void> {
+    try {
+      const list = await getModules();
+      setModules(list);
+      if (!selected && list[0]) setSelected(list[0].id);
+    } catch {
+      setMessage({ kind: 'error', text: 'Could not reach the CareLoop bridge.' });
+    }
+  }
+
+  useEffect(() => { void refreshList(); }, []);
 
   useEffect(() => {
-    getModules()
-      .then((list) => {
-        setModules(list);
-        setSelected(list[0]?.id);
-      })
-      .catch(() => setError('Could not reach the CareLoop bridge.'));
-  }, []);
+    if (!selected) return;
+    setDirty(false);
+    setMessage(undefined);
+    getCondition(selected)
+      .then((module) => setDraft(JSON.stringify(module, null, 2)))
+      .catch(() => setMessage({ kind: 'error', text: 'Could not load that module.' }));
+  }, [selected]);
+
+  async function save(): Promise<void> {
+    if (!selected) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(draft);
+    } catch (error) {
+      setMessage({ kind: 'error', text: `Not valid JSON: ${(error as Error).message}` });
+      return;
+    }
+
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      const result = await saveCondition(selected, parsed);
+      setDirty(false);
+      setMessage({
+        kind: 'ok',
+        text: `Saved. The bridge now serves ${result.modules} modules — no restart needed.`,
+      });
+      void refreshList();
+    } catch (error) {
+      setMessage({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Save failed.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reload(): Promise<void> {
+    setBusy(true);
+    try {
+      const result = await reloadConditions();
+      setMessage({
+        kind: 'info',
+        text: `Reloaded: ${result.stored} stored, ${result.total} total.`,
+      });
+      void refreshList();
+    } catch {
+      setMessage({ kind: 'error', text: 'Reload failed.' });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const active = modules.find((m) => m.id === selected);
 
@@ -31,16 +102,16 @@ export function TreatmentsPage(): JSX.Element {
         <div>
           <h1>Treatments</h1>
           <p className="sub">
-            The condition modules the engine can run. Adding one requires no engine changes.
+            The condition modules the engine can run. Adding one needs no engine changes.
           </p>
         </div>
+        <div className="spacer" />
+        <button className="btn" onClick={reload} disabled={busy}>Reload registry</button>
       </header>
-
-      {error && <div className="notice error" style={{ marginBottom: 16 }}>{error}</div>}
 
       <div className="grid-review">
         <Card title="Modules" subtitle={`${modules.length} registered`}>
-          {modules.length === 0 && !error ? (
+          {modules.length === 0 ? (
             <Empty>Loading…</Empty>
           ) : (
             modules.map((module) => (
@@ -64,30 +135,47 @@ export function TreatmentsPage(): JSX.Element {
             <Card padded>
               <h2 style={{ fontSize: 19 }}>{active.display}</h2>
               <p className="small muted" style={{ marginTop: 4 }}>{active.instrument}</p>
-
               <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-                <Badge tone="brand">{active.items} instrument items</Badge>
-                {typeof active.riskQuestions === 'number' && (
+                <Badge tone="brand">{active.items} items</Badge>
+                {active.riskQuestions !== undefined && (
                   <Badge tone="info">{active.riskQuestions} risk questions</Badge>
+                )}
+                {active.bands !== undefined && <Badge tone="routine">{active.bands} bands</Badge>}
+                {active.medications !== undefined && (
+                  <Badge tone="routine">{active.medications} drafted orders</Badge>
                 )}
                 {active.icd10 && <Badge tone="routine">ICD-10 {active.icd10}</Badge>}
               </div>
             </Card>
 
-            <Card title="What a module owns" padded>
-              <ul style={{ margin: 0, paddingLeft: 20, lineHeight: 1.9 }}>
-                <li>The instrument, its LOINC codes, and the scoring bands</li>
-                <li>Protocol steps: RxNorm-coded orders, follow-up interval, escalation flags</li>
-                <li>Future-risk questions and the rules that read them</li>
-                <li>Emergency rules, which take precedence over the whole call flow</li>
-                <li>Expert personas for the review panel</li>
-                <li>A patient-safe knowledge corpus for retrieval</li>
-              </ul>
-              <p className="small muted" style={{ marginTop: 16 }}>
-                Modules are authored as files under <span className="mono">src/conditions/</span> and
-                registered in <span className="mono">registry.ts</span>. The registry also hydrates
-                stored modules from FHIR PlanDefinitions at startup, with built-ins overlaid last so
-                a broken stored definition cannot shadow a known-good one.
+            <Card
+              title="Module definition"
+              subtitle="Saving publishes a PlanDefinition and hot-reloads the bridge"
+              action={
+                <button className="btn primary" onClick={save} disabled={!dirty || busy}>
+                  {busy ? 'Saving…' : 'Save and reload'}
+                </button>
+              }
+              padded
+            >
+              {message && (
+                <div className={`notice ${message.kind}`} style={{ marginBottom: 14 }}>
+                  {message.text}
+                </div>
+              )}
+              <textarea
+                value={draft}
+                onChange={(e) => { setDraft(e.target.value); setDirty(true); }}
+                spellCheck={false}
+                rows={26}
+                className="mono"
+                style={{ resize: 'vertical', lineHeight: 1.55 }}
+                aria-label="Module definition JSON"
+              />
+              <p className="small muted" style={{ marginTop: 12 }}>
+                Bands must be contiguous and cover the whole instrument range, every band needs a
+                protocol step, and one expert must be the safety reviewer. The server rejects a
+                module that fails any of these rather than accepting it partially.
               </p>
             </Card>
           </div>

@@ -4,12 +4,14 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import { z } from 'zod';
 import { env, live, publicBaseUrl } from '../config/env.js';
-import { listModules } from '../conditions/registry.js';
+import { listModules, reloadFromStore, tryGetModule } from '../conditions/registry.js';
+import { saveModule, storedModuleSchema, validateStoredModule } from '../conditions/store.js';
 import {
   buildStreamTwiml,
   placeOutboundCall,
   validateTwilioSignature,
 } from '../integrations/twilio.js';
+import { recordCall } from '../integrations/calllog.js';
 import { logger } from '../logger.js';
 import { loadPatientContext } from '../orchestration/context.js';
 import { createIntake } from '../orchestration/intake.js';
@@ -65,17 +67,69 @@ app.get('/health', (_req, res) => {
   });
 });
 
-app.get('/modules', (_req, res) => {
-  res.json(
-    listModules().map((module) => ({
-      id: module.id,
-      display: module.display,
-      icd10: module.icd10,
-      instrument: module.instrument.name,
-      items: module.instrument.items.length,
-      riskQuestions: module.riskQuestions.length,
-    })),
-  );
+function moduleSummary(module: ReturnType<typeof listModules>[number]) {
+  return {
+    id: module.id,
+    display: module.display,
+    icd10: module.icd10,
+    snomed: module.snomed,
+    instrument: module.instrument.name,
+    items: module.instrument.items.length,
+    riskQuestions: module.riskQuestions.length,
+    bands: module.bands.length,
+    medications: Object.values(module.steps).reduce(
+      (total, step) => total + step.medications.length,
+      0,
+    ),
+  };
+}
+
+app.get('/modules', (_req, res) => res.json(listModules().map(moduleSummary)));
+
+// --- Treatments as data -----------------------------------------------
+// `/conditions` is the authoring API. A module drives medication selection,
+// so writes are validated hard and a bad one is rejected outright rather than
+// partially applied.
+
+app.get('/conditions', (_req, res) => res.json(listModules().map(moduleSummary)));
+
+app.get('/conditions/:id', (req, res) => {
+  const module = tryGetModule(req.params.id);
+  if (!module) {
+    res.status(404).json({ error: 'unknown module' });
+    return;
+  }
+  res.json(module);
+});
+
+app.put('/conditions/:id', requireSecret, async (req, res) => {
+  const parsed = storedModuleSchema.safeParse({ ...req.body, id: req.params.id });
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid module', issues: parsed.error.issues });
+    return;
+  }
+
+  const problems = validateStoredModule(parsed.data);
+  if (problems.length > 0) {
+    res.status(422).json({ error: 'module failed clinical validation', problems });
+    return;
+  }
+
+  try {
+    await saveModule(parsed.data);
+    // Hot reload: the next call uses the new flow without a restart.
+    const { stored, total } = await reloadFromStore();
+    logger.info({ module: parsed.data.id, stored, total }, 'conditions.reloaded');
+    res.json({ saved: parsed.data.id, modules: total });
+  } catch (error) {
+    logger.error({ err: String(error) }, 'conditions.save.failed');
+    res.status(500).json({ error: 'could not save module' });
+  }
+});
+
+app.post('/conditions/reload', requireSecret, async (_req, res) => {
+  const result = await reloadFromStore();
+  res.json(result);
 });
 
 // ---------------------------------------------------------------------------
@@ -147,10 +201,23 @@ app.post('/call', requireSecret, async (req, res) => {
     }
 
     const callId = randomUUID();
-    registerSession(new CallSession(callId, context));
+    const session = new CallSession(callId, context);
+    registerSession(session);
 
     const call = await placeOutboundCall(to, callId);
+    session.callSid = call.callSid;
     logger.info({ callId, callSid: call.callSid, mock: call.mock }, 'call.started');
+
+    void recordCall({
+      callId,
+      callSid: call.callSid,
+      patientId: context.patientId,
+      status: 'initiated',
+      direction: 'outbound',
+      moduleId: context.moduleId,
+      mock: call.mock,
+    });
+
     res.status(202).json({ callId, callSid: call.callSid, mock: call.mock });
   } catch (error) {
     logger.error({ err: String(error) }, 'call.failed');
@@ -203,6 +270,20 @@ app.post('/voice/status', (req, res) => {
   const callId = String(req.query.callId ?? '');
   const status = String(req.body?.CallStatus ?? '');
   logger.info({ callId, status }, 'twilio.call.status');
+
+  const logged = getSession(callId);
+  if (logged?.callSid) {
+    void recordCall({
+      callId,
+      callSid: logged.callSid,
+      patientId: logged.context.patientId,
+      status: status as never,
+      direction: 'outbound',
+      moduleId: logged.context.moduleId,
+      answered: logged.state.answers.size,
+    });
+  }
+
   if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(status)) {
     const session = getSession(callId);
     void session?.end(`twilio-${status}`);
@@ -280,6 +361,13 @@ server.listen(env.port, () => {
     { port: env.port, publicBaseUrl: publicBaseUrl(), live },
     'careloop.bridge.listening',
   );
+
+  // Hydrate stored treatments once the port is open, so a slow or failing
+  // FHIR server delays authoring but never delays accepting calls.
+  void reloadFromStore()
+    .then(({ stored, total }) => logger.info({ stored, total }, 'conditions.hydrated.startup'))
+    .catch((error) => logger.warn({ err: String(error) }, 'conditions.hydrate.startup.failed'));
+
   for (const [name, enabled] of Object.entries(live)) {
     if (!enabled) logger.warn(`${name} is in MOCK mode — results are not real`);
   }

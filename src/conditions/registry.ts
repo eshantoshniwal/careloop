@@ -1,9 +1,14 @@
 import { logger } from '../logger.js';
 import { asthmaModule } from './asthma.js';
 import { depressionModule } from './depression.js';
+import { loadStoredModules, toRuntimeModule } from './store.js';
 import type { ConditionModule } from './types.js';
 
 const BUILT_IN: ConditionModule[] = [asthmaModule, depressionModule];
+
+export function builtInModule(id: string | undefined): ConditionModule | undefined {
+  return BUILT_IN.find((module) => module.id === id);
+}
 
 const registry = new Map<string, ConditionModule>();
 
@@ -30,6 +35,23 @@ export function hydrateModules(stored: ConditionModule[]): void {
     { stored: stored.length, builtIn: BUILT_IN.length, total: registry.size },
     'conditions.hydrated',
   );
+}
+
+/**
+ * Pull stored modules from FHIR and rebuild the registry.
+ *
+ * Called at startup and again whenever a treatment is edited, so an authoring
+ * change takes effect without a restart. Built-ins are overlaid last, which is
+ * what makes the reload safe: a stored module that has been broken by an edit
+ * cannot shadow a known-good built-in mid-demo.
+ */
+export async function reloadFromStore(): Promise<{ stored: number; total: number }> {
+  const stored = await loadStoredModules();
+  const runtime = stored.map((module) =>
+    toRuntimeModule(module, builtInModule(module.extends ?? module.id)),
+  );
+  hydrateModules(runtime);
+  return { stored: runtime.length, total: registry.size };
 }
 
 export function getModule(moduleId: string): ConditionModule {

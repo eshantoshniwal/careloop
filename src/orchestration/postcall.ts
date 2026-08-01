@@ -124,7 +124,12 @@ export async function runPostCallPipeline(input: {
     patientRecap: '',
     escalated,
   };
-  draft.patientRecap = buildPatientRecap({ module, draft, name: context.fullName });
+  draft.patientRecap = buildPatientRecap({
+    module,
+    draft,
+    name: context.fullName,
+    concerns: outcome.concerns,
+  });
 
   const written = await writeDraftPlan({
     module,

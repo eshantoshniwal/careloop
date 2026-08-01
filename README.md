@@ -95,7 +95,44 @@ The split down the middle is the design. The left branch decides the plan and mu
 
 A `ConditionModule` (`src/conditions/types.ts`) is the whole extension point: instrument and LOINC codes, score bands, protocol steps with RxNorm-coded orders, risk rules, emergency rules, expert personas, and a patient-safe Moss corpus. Add the file, register it in `src/conditions/registry.ts`, run `npm run moss:index`. The bridge, dashboard and pipeline pick it up without changes.
 
+Modules are also **data**: they persist as FHIR `PlanDefinition`s and the
+Treatments screen edits them live, so a treatment can be changed without a
+deploy. Saving validates hard — bands must be contiguous and cover the whole
+instrument range, every band needs a protocol step, and one expert must be the
+safety reviewer — and a module that fails is rejected rather than partially
+applied. Built-ins are overlaid last on hydration, so a broken stored module
+can never shadow a known-good one mid-demo.
+
 The two shipped modules are `asthma` (ACT) and `depression` (PHQ-9).
+
+## Operating it
+
+```bash
+npm run doctor          # check every integration; reports ok / mock / fail
+npm run demo:history    # backfill a demo patient's trend, meds and prior plan
+npm run demo:call       # run a scripted check-in through the real pipeline, no phone
+npm run reset           # clear generated artifacts (dry run; --apply to write)
+npm run update-phones -- +13215550123 --apply   # repoint patients at a handset
+```
+
+`npm run doctor` is the one to run before a demo. It talks to every configured
+service, checks one patient's real context, and says plainly which results are
+live and which are mock.
+
+## Two orchestration modes, one flow
+
+The interview is described once, in `src/orchestration/flow.ts`, and rendered
+two ways:
+
+- **`prompt`** flattens the whole flow into one system prompt with every tool
+  available. This is the live default, because voice-agent providers generally
+  cannot change a tool set mid-call.
+- **`state`** walks the flow node by node and exposes only the tools that node
+  allows.
+
+`npm run simulate` prints both renderings so they can be compared
+deterministically. Because both come from one spec, they cannot drift into
+asking different questions. Switch with `ORCH_MODE=state`.
 
 ## Tests
 
@@ -103,7 +140,13 @@ The two shipped modules are `asthma` (ACT) and `depression` (PHQ-9).
 npm test
 ```
 
-51 tests over the parts where being wrong matters: band boundaries, the crisis override, clamping of malformed answers, allergy/duplicate/interaction detection, escalation rules, 271 mapping, panel consensus aggregation, and the tool dispatch contract (idempotency, unknown-tool rejection, out-of-range answers).
+91 tests over the parts where being wrong matters: band boundaries, the crisis
+override, clamping of malformed answers, spoken-number parsing ("about four
+canisters" must not score as zero), allergy/duplicate/interaction detection,
+escalation rules, 271 mapping, panel consensus aggregation, the tool dispatch
+contract (idempotency, unknown-tool rejection, out-of-range answers), flow
+termination and tool gating, and condition-module validation (band gaps,
+missing protocol steps, missing safety reviewer).
 
 ## Deployment
 

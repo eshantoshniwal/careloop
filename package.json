@@ -21,7 +21,10 @@
     "web:build": "npm --prefix web run build",
     "doctor": "tsx src/scripts/doctor.ts",
     "demo:history": "tsx src/scripts/demo-history.ts",
-    "demo:call": "tsx src/scripts/demo-call.ts"
+    "demo:call": "tsx src/scripts/demo-call.ts",
+    "reset": "tsx src/scripts/reset.ts",
+    "update-phones": "tsx src/scripts/update-phones.ts",
+    "bridge": "tsx watch src/bridge/server.ts"
   },
   "dependencies": {
     "@medplum/core": "^3.2.9",

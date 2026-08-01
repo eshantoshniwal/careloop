@@ -10,9 +10,9 @@
 const BASE = import.meta.env.VITE_BRIDGE_URL || 'http://localhost:3000';
 const SECRET = import.meta.env.VITE_BRIDGE_SECRET || 'dev-secret';
 
-async function request<T>(path: string, body?: unknown): Promise<T> {
+async function requestMethod<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(`${BASE}${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
+    method,
     headers: {
       'Content-Type': 'application/json',
       'X-CareLoop-Secret': SECRET,
@@ -21,11 +21,25 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   });
 
   const text = await response.text();
-  const parsed = text ? JSON.parse(text) : {};
+  let parsed: any = {};
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(`Bridge returned ${response.status}: ${text.slice(0, 200)}`);
+  }
   if (!response.ok) {
-    throw new Error(parsed.error ?? `Bridge returned ${response.status}`);
+    // Validation failures carry structured detail worth surfacing verbatim —
+    // "invalid module" alone is useless when authoring a treatment.
+    const detail =
+      parsed.problems?.join('; ') ??
+      parsed.issues?.map((i: any) => `${i.path?.join('.')}: ${i.message}`).join('; ');
+    throw new Error(detail ? `${parsed.error}: ${detail}` : parsed.error ?? `Bridge returned ${response.status}`);
   }
   return parsed as T;
+}
+
+async function request<T>(path: string, body?: unknown): Promise<T> {
+  return requestMethod<T>(body === undefined ? 'GET' : 'POST', path, body);
 }
 
 export interface BridgeHealth {
@@ -42,7 +56,10 @@ export interface ModuleSummary {
   instrument: string;
   items: number;
   icd10?: string;
+  snomed?: string;
   riskQuestions?: number;
+  bands?: number;
+  medications?: number;
 }
 
 export const getModules = () => request<ModuleSummary[]>('/modules');
@@ -63,6 +80,14 @@ export const createIntake = (payload: IntakePayload) =>
 
 export const startCall = (patientId: string, moduleId?: string) =>
   request<{ callId: string; callSid: string; mock: boolean }>('/call', { patientId, moduleId });
+
+export const getCondition = (id: string) => request<Record<string, unknown>>(`/conditions/${id}`);
+
+export const saveCondition = (id: string, module: unknown) =>
+  requestMethod<{ saved: string; modules: number }>('PUT', `/conditions/${id}`, module);
+
+export const reloadConditions = () =>
+  request<{ stored: number; total: number }>('/conditions/reload', {});
 
 export const approve = (input: {
   carePlanId: string;

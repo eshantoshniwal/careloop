@@ -244,9 +244,12 @@ export const asthmaModule: ConditionModule = {
     poor: {
       id: 'poor',
       summary:
-        'Poorly controlled. Step up to medium-dose ICS-formoterol MART, review technique, adherence and trigger exposure, and arrange earlier clinical review.',
+        'Poorly controlled. Step up to medium-dose ICS-formoterol MART with a short oral corticosteroid course to regain control, review technique, adherence and trigger exposure, and arrange earlier clinical review.',
       patientGoal: 'Bring symptoms down so you can sleep through the night and get through a normal day.',
-      medications: [MART_MEDIUM, RELIEVER],
+      // A short steroid course here rather than only at the worst band: an ACT
+      // in the 11-15 range usually reflects active inflammation that a
+      // controller step-up alone takes weeks to settle.
+      medications: [MART_MEDIUM, RELIEVER, ORAL_STEROID],
       followUpDays: 21,
       referralRequired: false,
       urgent: false,

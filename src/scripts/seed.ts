@@ -8,6 +8,7 @@
 
 import { live } from '../config/env.js';
 import { getModule, listModules } from '../conditions/registry.js';
+import { saveModule, toStoredModule, validateStoredModule } from '../conditions/store.js';
 import { createIntake } from '../orchestration/intake.js';
 
 function arg(name: string, fallback: string): string {
@@ -46,6 +47,19 @@ async function main(): Promise<void> {
     allergies: arg('allergies', 'penicillin').split(',').filter(Boolean),
     triggers: arg('triggers', 'house dust mite,cold air').split(',').filter(Boolean),
   });
+
+  // Publish the built-in modules as PlanDefinitions so the registry has
+  // something to hydrate and the Treatments admin has something to edit.
+  for (const module of listModules()) {
+    const stored = toStoredModule(module);
+    const problems = validateStoredModule(stored);
+    if (problems.length > 0) {
+      console.warn(`  ! ${module.id} failed validation: ${problems.join('; ')}`);
+      continue;
+    }
+    await saveModule(stored);
+    console.log(`  published PlanDefinition for ${module.id}`);
+  }
 
   console.log('\nSeeded. Add these to your .env:\n');
   console.log(`SEED_PATIENT_ID=${result.patientId}`);

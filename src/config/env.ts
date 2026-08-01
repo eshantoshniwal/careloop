@@ -14,6 +14,13 @@ export const env = {
   port: num('PORT', 3000),
   publicHost: str('PUBLIC_HOST'),
   logLevel: str('LOG_LEVEL', 'info'),
+  /**
+   * `prompt` flattens the flow into one system prompt with every tool
+   * available; `state` walks node by node with gated tools. Prompt is the live
+   * default because voice-agent providers generally cannot change a tool set
+   * mid-call — see `src/orchestration/renderers.ts`.
+   */
+  orchMode: (str('ORCH_MODE', 'prompt') === 'state' ? 'state' : 'prompt') as 'prompt' | 'state',
   toolSharedSecret: str('TOOL_SHARED_SECRET', 'dev-secret'),
 
   medplum: {

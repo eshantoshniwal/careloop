@@ -21,13 +21,19 @@ import type { PatientContext } from '../types.js';
  * calls, so a failure in one call cannot corrupt another. Medplum is reached
  * through a stateless client, so there is no per-call connection to leak.
  */
+/** Seconds of grace after submission so the closing recap actually plays. */
+const HANGUP_GRACE_MS = 10_000;
+
 export class CallSession {
   readonly state: CallState;
+  /** Twilio call SID, set once the call is placed. Used by the call log. */
+  callSid?: string;
   private agent?: DeepgramAgent;
   private twilioSocket?: WebSocket;
   private streamSid?: string;
   private ended = false;
   private postCallStarted = false;
+  private hangupTimer?: NodeJS.Timeout;
 
   constructor(
     readonly callId: string,
@@ -116,6 +122,7 @@ export class CallSession {
         // complete. The pipeline starts now so the patient never waits on it.
         if (call.name === 'submitQuestionnaire' && this.state.submitted) {
           this.startPostCall('questionnaire-submitted');
+          this.scheduleHangup();
         }
       })();
     });
@@ -170,9 +177,30 @@ export class CallSession {
       });
   }
 
+  /**
+   * End the call ourselves a beat after submission.
+   *
+   * Without this the line stays open after the recap and the patient is left
+   * listening to silence, unsure whether to hang up. The grace period is there
+   * so the closing words actually finish playing — hanging up the instant the
+   * tool returns would cut Maya off mid-sentence.
+   */
+  private scheduleHangup(): void {
+    if (this.hangupTimer) return;
+    this.hangupTimer = setTimeout(() => {
+      logger.info({ callId: this.callId }, 'call.autohangup');
+      void this.end('recap-complete');
+    }, HANGUP_GRACE_MS);
+    this.hangupTimer.unref();
+  }
+
   async end(reason: string): Promise<void> {
     if (this.ended) return;
     this.ended = true;
+    if (this.hangupTimer) {
+      clearTimeout(this.hangupTimer);
+      this.hangupTimer = undefined;
+    }
     logger.info({ callId: this.callId, reason, answers: this.state.answers.size }, 'call.ended');
 
     this.agent?.close();

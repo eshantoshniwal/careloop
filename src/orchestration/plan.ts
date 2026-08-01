@@ -12,7 +12,7 @@ import type {
 import type { ConditionModule } from '../conditions/types.js';
 import { createResource, searchResources, updateResource } from '../integrations/medplum.js';
 import { logger } from '../logger.js';
-import type { DraftPlan, MedOrder, PatientContext } from '../types.js';
+import type { Concern, DraftPlan, MedOrder, PatientContext } from '../types.js';
 
 const LOINC = 'http://loinc.org';
 const RXNORM = 'http://www.nlm.nih.gov/research/umls/rxnorm';
@@ -33,15 +33,35 @@ function isoDaysFromNow(days: number): string {
   return new Date(Date.now() + days * 86_400_000).toISOString();
 }
 
+/**
+ * The patient-facing recap.
+ *
+ * The patient should leave the call with something, so this reflects back what
+ * they actually said before anything else — being heard is the part they can
+ * verify, and it is what makes the rest credible. Nothing here is framed as a
+ * prescription, because none of it is one yet.
+ */
 export function buildPatientRecap(input: {
   module: ConditionModule;
   draft: Pick<DraftPlan, 'score' | 'step' | 'escalated'>;
   name: string;
+  concerns?: Concern[];
 }): string {
   const { module, draft, name } = input;
   const lines: string[] = [];
+  const firstName = name.split(' ')[0] ?? name;
 
-  lines.push(`Thanks for the check-in, ${name}.`);
+  lines.push(`Thanks for taking the time today, ${firstName}.`);
+
+  // Reflect back at most two concerns: more than that stops being a recap and
+  // starts being a recitation.
+  const concerns = (input.concerns ?? []).slice(0, 2);
+  if (concerns.length > 0) {
+    lines.push(
+      `You told us about ${concerns.map((c) => `"${c.text.replace(/\s+/g, ' ').trim()}"`).join(' and ')} — that has been written down for your clinician.`,
+    );
+  }
+
   lines.push(
     `Your ${module.instrument.name} score today was ${draft.score.total}, which we read as "${draft.score.bandLabel}".`,
   );

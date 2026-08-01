@@ -14,6 +14,8 @@
 import './quiet.js';
 import { getModule } from '../conditions/registry.js';
 import { clearMockStore, createResource, mockStoreSnapshot } from '../integrations/medplum.js';
+import { buildIntakeFlow } from '../orchestration/flow.js';
+import { compareRenderings } from '../orchestration/renderers.js';
 import { runPostCallPipeline } from '../orchestration/postcall.js';
 import { createCallState, dispatchTool, toCallOutcome } from '../orchestration/tools.js';
 import type { PatientContext } from '../types.js';
@@ -140,6 +142,18 @@ async function main(): Promise<void> {
     id: scenario.context.patientId,
     name: [{ text: scenario.context.fullName }],
   });
+
+  // Both renderings come from the one flow spec. Printing them side by side is
+  // the A/B foundation: if these ever disagree about the interview, the flow
+  // is the single place to fix it.
+  heading('Orchestration renderings (one flow, two modes)');
+  const flow = buildIntakeFlow(module);
+  const comparison = compareRenderings(module, scenario.context);
+  console.log(`  flow nodes:        ${comparison.stateNodes} (start "${comparison.stateStartNode}")`);
+  console.log(`  prompt mode:       ${comparison.promptChars} chars, ${comparison.promptTools} tools available at once`);
+  console.log(`  state mode:        ${comparison.stateStartTools} tools gated at the start node, ${comparison.maxNodeTools} max on any node`);
+  console.log(`  emergency rules:   ${flow.emergencyRules.length} (rendered ahead of the flow in both modes)`);
+  console.log(`  active mode:       ${process.env.ORCH_MODE === 'state' ? 'state' : 'prompt'}`);
 
   const state = createCallState(`sim-${Date.now()}`, scenario.context);
 
