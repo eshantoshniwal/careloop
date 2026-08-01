@@ -35,8 +35,12 @@ export function buildAgentPrompt(input: {
 
 export function buildGreeting(context: PatientContext): string {
   const firstName = context.fullName.split(' ')[0] ?? 'there';
-  // Beat one only: confirm we have the right person before saying anything
-  // else. The purpose introduction and the "is now a good time?" check follow
-  // in the greeting flow node once identity is confirmed.
-  return `Hi there — is this ${firstName}?`;
+  // The opening is deterministic on purpose: identity check plus the reason for
+  // the call, in one breath, so the purpose can never be dropped by the model.
+  // Date-of-birth verification and the questions follow from the flow.
+  return (
+    `Hi, is this ${firstName}? ` +
+    `I'm Maya, calling from your care team about your upcoming doctor's visit. ` +
+    `This is just a quick pre-visit check-in to help your doctor get your care plan ready before you come in.`
+  );
 }

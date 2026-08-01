@@ -62,7 +62,7 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   nodes.push({
     id: 'greeting',
     kind: 'greeting',
-    say: "You have already opened by asking if this is {{firstName}}. Once they confirm it is them, introduce yourself in one or two sentences: you are Maya, a check-in assistant calling on behalf of their clinic about their upcoming appointment, and this is a quick pre-visit check-in so their doctor can prepare their care plan before they come in. Then ask if now is a good time. If it is not, offer to call back and end the call. If the person says it is NOT {{firstName}} or a wrong number, apologize briefly and end — do not share any details.",
+    say: "Your opening line already (1) asked if this is {{firstName}}, (2) said who you are — Maya from their care team — and (3) explained the purpose: a quick pre-visit check-in to help their doctor prepare their care plan. Do NOT repeat any of that. Just respond to what they say: if they confirm they are {{firstName}} and are happy to continue, move straight on to verifying their date of birth. If it is a bad time, offer to call back and end warmly. If they say it is not {{firstName}} or a wrong number, apologize briefly and end without sharing any details.",
     tools: [],
     next: 'verify',
   });
