@@ -21,13 +21,27 @@ export async function placeOutboundCall(to: string, callId: string): Promise<Pla
     logger.warn({ callId }, 'twilio.mock.call');
     return { callSid: `mock-call-${callId}`, mock: true };
   }
+  /**
+   * Answering-machine detection is OFF by default, and that is deliberate.
+   *
+   * With `machineDetection: 'Enable'`, Twilio withholds the TwiML request until
+   * AMD finishes and drops the call outright on `machine_start`. A patient who
+   * answers with a short "hello?" then pauses — exactly how people answer an
+   * unknown number — is classified as a machine, and the check-in never
+   * happens. Failing to reach someone who did answer is a worse outcome than
+   * occasionally greeting a voicemail, so AMD is opt-in via TWILIO_AMD=true.
+   */
+  const amdEnabled = process.env.TWILIO_AMD === 'true';
+
   const call = await getClient().calls.create({
     to,
     from: env.twilio.phoneNumber,
     url: `${publicBaseUrl()}/voice?callId=${encodeURIComponent(callId)}`,
     statusCallback: `${publicBaseUrl()}/voice/status?callId=${encodeURIComponent(callId)}`,
     statusCallbackEvent: ['initiated', 'answered', 'completed'],
-    machineDetection: 'Enable',
+    ...(amdEnabled
+      ? { machineDetection: 'DetectMessageEnd' as const, machineDetectionTimeout: 15 }
+      : {}),
   });
   logger.info({ callId, callSid: call.sid }, 'twilio.call.placed');
   return { callSid: call.sid, mock: false };
