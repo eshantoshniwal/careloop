@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/bridge.ts","./src/data.ts","./src/main.tsx","./src/medplum.ts","./src/vite-env.d.ts","./src/components/intakeform.tsx","./src/components/plandetail.tsx","./src/components/signin.tsx","./src/components/trend.tsx"],"version":"5.9.3"}

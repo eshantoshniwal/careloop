@@ -1,0 +1,11 @@
+name          = "careloop"
+region        = "us-east-1"
+instance_type = "t3.small"
+
+# DNS A record for this host must point at the Elastic IP before Caddy can
+# issue a certificate.
+public_host = "bridge.example.com"
+
+repo_url = "https://github.com/your-org/careloop.git"
+
+env_parameter_name = "/careloop/bridge-env"
