@@ -1,5 +1,5 @@
 import type { CarePlan, MedicationRequest } from '@medplum/fhirtypes';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { approve } from '../bridge';
 import { CallDialog, type CallTarget } from '../components/CallDialog';
 import {
@@ -195,6 +195,7 @@ export function ReviewPage({
   // it here for the reviewer to edit and save — it never rewrites an order.
   const [note, setNote] = useState<string>();
   const [savingNote, setSavingNote] = useState(false);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   // Worst first, for real — the list is triage-ordered, not recency-ordered.
   const ranked = [...summaries].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
@@ -277,6 +278,17 @@ export function ReviewPage({
       const base = (current ?? planNote).trim();
       return base.includes(trimmed) ? base : base ? `${base}\n${trimmed}` : trimmed;
     });
+    // The note lives further down the page, so without moving the reader to it
+    // the button looks like it did nothing.
+    requestAnimationFrame(() => {
+      noteRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      noteRef.current?.focus({ preventScroll: true });
+    });
+  }
+
+  /** Already in the note — the button says so rather than silently no-op'ing. */
+  function isApplied(text: string): boolean {
+    return noteValue.includes(text.trim());
   }
 
   async function saveNote(): Promise<void> {
@@ -659,11 +671,15 @@ export function ReviewPage({
                         </span>
                         {isDraft && (
                           <button
-                            className="btn"
+                            className={`btn${isApplied(review.edit) ? ' applied' : ''}`}
                             onClick={() => applySuggestion(review.edit!)}
-                            title="Add this suggestion to your clinician note"
+                            title={
+                              isApplied(review.edit)
+                                ? 'Already in your clinician note'
+                                : 'Add this suggestion to your clinician note'
+                            }
                           >
-                            Apply
+                            {isApplied(review.edit) ? <>{Icon.check()} Applied</> : 'Apply'}
                           </button>
                         )}
                       </div>
@@ -716,6 +732,7 @@ export function ReviewPage({
                 padded
               >
                 <textarea
+                  ref={noteRef}
                   rows={4}
                   value={noteValue}
                   onChange={(e) => setNote(e.target.value)}

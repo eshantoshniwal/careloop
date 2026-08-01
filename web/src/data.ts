@@ -565,6 +565,30 @@ export function usePlanQueue(plans: CarePlan[]): { rows: EnrichedPlan[]; loading
   return { rows, loading };
 }
 
+/**
+ * Resolve one CarePlan by id, preferring a copy already in hand.
+ *
+ * A plan reached from a URL is not necessarily in the draft queue — an approved
+ * plan opened from the patient hub, or a reloaded deep link, has to be fetched.
+ */
+export function useCarePlan(id: string | undefined, known: CarePlan[]): CarePlan | undefined {
+  const fromList = known.find((p) => p.id === id);
+  const [fetched, setFetched] = useState<CarePlan>();
+
+  useEffect(() => {
+    if (!id || fromList) return;
+    let cancelled = false;
+    medplum
+      .readResource('CarePlan', id)
+      .then((plan) => !cancelled && setFetched(plan))
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [id, fromList]);
+
+  if (!id) return undefined;
+  return fromList ?? (fetched?.id === id ? fetched : undefined);
+}
+
 export async function saveMedication(request: MedicationRequest): Promise<MedicationRequest> {
   return medplum.updateResource(request);
 }

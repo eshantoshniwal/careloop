@@ -2,7 +2,8 @@ import type { CarePlan } from '@medplum/fhirtypes';
 import { useEffect, useState } from 'react';
 import { getHealth, type BridgeHealth } from './bridge';
 import { SignIn } from './components/SignIn';
-import { useDraftPlans, useLiveFeed, usePatients } from './data';
+import { useCarePlan, useDraftPlans, useLiveFeed, usePatients } from './data';
+import { useHashLocation, type Route as HashRoute } from './router';
 import { CallsPage } from './pages/Calls';
 import { DashboardPage } from './pages/Dashboard';
 import { IntakePage } from './pages/Intake';
@@ -15,7 +16,7 @@ import { TreatmentsPage } from './pages/Treatments';
 import { medplum, signOut } from './medplum';
 import { Avatar, Icon, applyTheme, readTheme, resolvedTheme, type Theme } from './ui';
 
-export type Route = 'dashboard' | 'live' | 'review' | 'calls' | 'patients' | 'intake' | 'treatments' | 'patient';
+export type Route = HashRoute;
 
 const NAV: Array<{ route: Route; label: string; icon: () => JSX.Element }> = [
   { route: 'dashboard', label: 'Dashboard', icon: Icon.home },
@@ -44,16 +45,20 @@ function MockBanner({ health }: { health?: BridgeHealth }): JSX.Element | null {
 
 export function App(): JSX.Element {
   const [authenticated, setAuthenticated] = useState(medplum.isAuthenticated());
-  const [route, setRoute] = useState<Route>('dashboard');
-  const [selectedPlan, setSelectedPlan] = useState<CarePlan>();
-  const [livePatientId, setLivePatientId] = useState<string>();
-  const [detailPatientId, setDetailPatientId] = useState<string>();
+  const { location, navigate } = useHashLocation();
+  const route = location.route;
   const [health, setHealth] = useState<BridgeHealth>();
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [navOpen, setNavOpen] = useState(false);
 
   const { plans, loading, refresh } = useDraftPlans();
   const { patients } = usePatients();
+
+  // The URL is the source of truth for what is on screen, so a reload or a
+  // Back press lands exactly where the user was.
+  const selectedPlan = useCarePlan(route === 'review' ? location.id : undefined, plans);
+  const livePatientId = route === 'live' ? location.id : undefined;
+  const detailPatientId = route === 'patient' ? location.id : undefined;
 
   // Drives the red dot on Live: something is being charted right now.
   const watched = livePatientId ?? patients[0]?.id;
@@ -77,23 +82,23 @@ export function App(): JSX.Element {
   const profileEmail = medplum.getActiveLogin()?.profile?.display ?? '';
 
   function go(next: Route): void {
-    setRoute(next);
+    navigate(next);
     setNavOpen(false);
   }
 
   function openPlan(plan: CarePlan): void {
-    setSelectedPlan(plan);
-    go('review');
+    navigate('review', plan.id);
+    setNavOpen(false);
   }
 
   function openLive(patientId: string): void {
-    setLivePatientId(patientId);
-    go('live');
+    navigate('live', patientId);
+    setNavOpen(false);
   }
 
   function openPatient(patientId: string): void {
-    setDetailPatientId(patientId);
-    go('patient');
+    navigate('patient', patientId);
+    setNavOpen(false);
   }
 
   const isDark = resolvedTheme(theme) === 'dark';
@@ -183,21 +188,25 @@ export function App(): JSX.Element {
             />
           )}
           {route === 'live' && (
-            <LivePage patients={patients} patientId={livePatientId} onSelect={setLivePatientId} />
+            <LivePage
+              patients={patients}
+              patientId={livePatientId}
+              onSelect={(id) => navigate('live', id)}
+            />
           )}
           {route === 'review' && (
-            selectedPlan ? (
+            location.id ? (
               <ReviewPage
                 plans={plans}
                 loading={loading}
                 selected={selectedPlan}
-                onSelect={setSelectedPlan}
-                onBack={() => setSelectedPlan(undefined)}
+                onSelect={openPlan}
+                onBack={() => navigate('review')}
                 onChanged={refresh}
                 onOpenLive={openLive}
               />
             ) : (
-              <ReviewQueuePage plans={plans} loading={loading} onOpenPlan={setSelectedPlan} />
+              <ReviewQueuePage plans={plans} loading={loading} onOpenPlan={openPlan} />
             )
           )}
           {route === 'calls' && <CallsPage onOpenPatient={openPatient} />}

@@ -4,7 +4,7 @@ import { BandMeter, DeltaBadge, ScoreTrendChart, SeverityBar, type Segment } fro
 import { bandForScore, scaleForText, toneMark, toneVars } from '../clinical/scale';
 import { triage, type TriageLevel } from '../clinical/triage';
 import { usePlanQueue, type EnrichedPlan } from '../data';
-import { Avatar, Badge, Card, Chip, Empty, Icon, MetricStrip, Modal, Skeleton, relativeTime, type Tone } from '../ui';
+import { Avatar, Badge, Card, Chip, Empty, Icon, MetricStrip, Modal, Skeleton, Sparkline, relativeTime, type Tone } from '../ui';
 
 const CONSENSUS_LABEL: Record<string, string> = {
   revise: 'Revise before approval',
@@ -18,6 +18,37 @@ const CONSENSUS_TONE: Record<string, Tone> = {
 };
 
 const LEVEL_TONE: Record<TriageLevel, Tone> = { critical: 'critical', urgent: 'urgent', routine: 'routine' };
+
+/**
+ * Triage reasons as glanceable chips.
+ *
+ * The full sentence stays in the tooltip and the preview; the card carries the
+ * shortest phrase that still says which rule fired, so a reviewer scanning the
+ * board reads shapes and colour rather than paragraphs.
+ */
+function shortReason(reason: { code: string; label: string }): string {
+  switch (reason.code) {
+    case 'safety-critical': return reason.label.replace(/ critical safety flags?/, ' safety');
+    case 'peer-revise': return 'panel: revise';
+    case 'trend-worsened': return reason.label.replace(/Worsened (\d+) points? since last check-in/, '↓$1 since last');
+    case 'coverage': return 'coverage';
+    case 'safety-warning': return reason.label.replace(/ safety warnings?/, ' warning');
+    default: return reason.label;
+  }
+}
+
+function flagTone(code: string): string {
+  if (code === 'safety-critical' || code === 'score-red-band') return 'critical';
+  if (code === 'peer-revise' || code === 'trend-worsened' || code === 'safety-warning' || code === 'score-amber-band') return 'urgent';
+  return 'routine';
+}
+
+function flagIcon(code: string): JSX.Element {
+  if (code === 'safety-critical' || code === 'safety-warning') return Icon.shield();
+  if (code === 'peer-revise') return Icon.users();
+  if (code === 'trend-worsened') return Icon.trend();
+  return Icon.list();
+}
 
 type Sort = 'urgent' | 'newest' | 'oldest';
 
@@ -42,6 +73,7 @@ export function ReviewQueuePage({
   const [sort, setSort] = useState<Sort>('urgent');
   const [preview, setPreview] = useState<EnrichedPlan>();
   const [hoveredDot, setHoveredDot] = useState<string>();
+  const [insightsOpen, setInsightsOpen] = useState(false);
 
   const triaged = useMemo(
     () =>
@@ -136,8 +168,10 @@ export function ReviewQueuePage({
         />
       </div>
 
-      {/* Queue at a glance — the whole panel, per instrument. */}
-      {instrumentGroups.length > 0 && (
+      {/* Queue at a glance — the whole panel, per instrument. Collapsed by
+          default: the board below is the job, this is the context you open when
+          you want it. */}
+      {instrumentGroups.length > 0 && insightsOpen && (
         <Card title="Queue at a glance" subtitle="Clinical picture across every draft plan" padded>
           {instrumentGroups.map(({ scale, patients }) => {
             const span = scale.max - scale.min || 1;
@@ -231,6 +265,11 @@ export function ReviewQueuePage({
           <Chip active={filter === 'routine'} onClick={() => setFilter('routine')}>Routine ({counts.routine})</Chip>
         </div>
         <div style={{ flex: 1 }} />
+        {instrumentGroups.length > 0 && (
+          <Chip active={insightsOpen} onClick={() => setInsightsOpen((o) => !o)}>
+            {Icon.trend()} {insightsOpen ? 'Hide' : 'Queue insights'}
+          </Chip>
+        )}
         <label className="sort-field">
           <span className="small muted">Sort</span>
           <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort the queue">
@@ -266,58 +305,60 @@ export function ReviewQueuePage({
                   <Badge tone={LEVEL_TONE[t.level]}>{t.level}</Badge>
                 </header>
 
-                {t.reasons.length > 0 && (
-                  <ul className="qcard-reasons">
-                    {t.reasons.slice(0, 3).map((r) => <li key={r.code}>{r.label}</li>)}
-                    {t.reasons.length > 3 && <li className="muted">+{t.reasons.length - 3} more</li>}
-                  </ul>
-                )}
-
-                {row.scoreTotal != null && (
-                  <div style={{ margin: '14px 0 4px' }}>
-                    <BandMeter scale={scale} total={row.scoreTotal} />
+                {/* The score reads as a figure, with the meter placing it on
+                    the instrument and the delta showing direction — no prose. */}
+                {row.scoreTotal != null && band && (
+                  <div className="qcard-score">
+                    <div className="qcard-score-num" style={{ color: toneVars(band.tone).ink }}>
+                      {row.scoreTotal}
+                      <span className="qcard-score-max">/{scale.max}</span>
+                    </div>
+                    <div className="qcard-score-side">
+                      <div className="qcard-score-band" style={{ color: toneVars(band.tone).ink }}>
+                        {band.label}
+                      </div>
+                      {row.trendPoints.length > 1 && (
+                        <DeltaBadge points={row.trendPoints} scale={scale} />
+                      )}
+                    </div>
+                    {row.trendPoints.length > 1 && (
+                      <Sparkline
+                        values={row.trendPoints.map((p) => p.total)}
+                        width={92}
+                        height={34}
+                        tone={band.tone === 'red' ? 'critical' : band.tone === 'amber' ? 'urgent' : 'ok'}
+                      />
+                    )}
                   </div>
                 )}
-
-                <div className="qcard-facts">
-                  <div><span className="l">Medication</span><span className="v">{row.medicationCount} in plan</span></div>
-                  <div>
-                    <span className="l">Experts</span>
-                    <span className="v">
-                      {row.panelTotal ? `${row.panelAgree ?? 0}/${row.panelTotal} agree` : '—'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="l">Est. copay</span>
-                    <span className="v">
-                      {row.copayUsd != null ? `$${row.copayUsd}` : '—'}
-                      {row.priorAuthRequired && <span className="pa"> · PA</span>}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="l">Trend</span>
-                    <span className="v">
-                      {row.trendPoints.length > 1 ? <DeltaBadge points={row.trendPoints} scale={scale} /> : '—'}
-                    </span>
-                  </div>
-                </div>
-
-                {row.consensus && (
-                  <div style={{ marginTop: 12 }}>
-                    <Badge tone={CONSENSUS_TONE[row.consensus] ?? 'info'}>
-                      {CONSENSUS_LABEL[row.consensus] ?? row.consensus}
-                    </Badge>
-                  </div>
+                {row.scoreTotal == null && (
+                  <p className="qcard-noscore">
+                    {row.loaded ? 'No score recorded for this plan yet.' : 'Loading score…'}
+                  </p>
                 )}
 
-                {row.recap && <blockquote className="qcard-quote">{row.recap}</blockquote>}
+                {/* One reason — the single thing that put this at this rank.
+                    Everything else is a click away in Preview, so the board can
+                    be scanned rather than read. */}
+                {t.reasons[0] && (
+                  <div className="qcard-flags">
+                    <span className={`flag ${flagTone(t.reasons[0].code)}`} title={t.reasons[0].label}>
+                      {flagIcon(t.reasons[0].code)} {shortReason(t.reasons[0])}
+                    </span>
+                    {t.reasons.length > 1 && (
+                      <span className="flag more" title={t.reasons.slice(1).map((r) => r.label).join('\n')}>
+                        +{t.reasons.length - 1}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                 <footer className="qcard-foot">
                   <span className="small muted">{relativeTime(row.plan.created)}</span>
                   <div style={{ flex: 1 }} />
                   <button className="btn" onClick={() => setPreview(row)}>Preview</button>
                   <button className="btn primary" onClick={() => onOpenPlan(row.plan)}>
-                    Open review {Icon.arrowRight()}
+                    Review {Icon.arrowRight()}
                   </button>
                 </footer>
                 {band && <span className="qcard-edge" style={{ background: toneMark(band.tone) }} />}
@@ -391,6 +432,27 @@ function PreviewModal({
           </div>
         </>
       )}
+
+      {/* The numbers the card deliberately leaves off. */}
+      <div className="qcard-icons" style={{ marginTop: 0, marginBottom: 18 }}>
+        <span title={`${row.medicationCount} medication${row.medicationCount === 1 ? '' : 's'} drafted`}>
+          {Icon.clipboard()} {row.medicationCount} drafted
+        </span>
+        <span title={row.panelTotal ? `${row.panelAgree ?? 0} of ${row.panelTotal} experts agree` : 'No expert panel'}>
+          {Icon.users()} {row.panelTotal ? `${row.panelAgree ?? 0}/${row.panelTotal} agree` : 'no panel'}
+        </span>
+        <span title={row.copayUsd != null ? `Estimated copay $${row.copayUsd}` : 'Copay unknown'}>
+          {Icon.shield()} {row.copayUsd != null ? `$${row.copayUsd}` : '—'}
+        </span>
+        {row.priorAuthRequired && <span className="pa" title="Prior authorisation required">PA</span>}
+        {row.consensus && (
+          <span style={{ marginLeft: 'auto' }}>
+            <Badge tone={CONSENSUS_TONE[row.consensus] ?? 'info'}>
+              {CONSENSUS_LABEL[row.consensus] ?? row.consensus}
+            </Badge>
+          </span>
+        )}
+      </div>
 
       {row.trendPoints.length > 1 && (
         <div style={{ marginBottom: 18 }}>

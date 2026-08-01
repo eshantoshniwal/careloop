@@ -666,6 +666,7 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
   background: var(--urgent-bg); border: 1px solid var(--urgent-line); border-radius: var(--r-sm);
 }
 .persona-edit .btn { flex: 0 0 auto; padding: 5px 12px; font-size: 12.5px; }
+.persona-edit .btn.applied { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); }
 
 /* The rule that fired, above its plain-language explanation. */
 .risk-code {
@@ -790,6 +791,50 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
 .qcard-head { display: flex; align-items: center; gap: 12px; }
 .qcard-head h3 { font-size: 16px; }
 .qcard-reasons { margin: 13px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--ink-2); }
+
+/* The score as the card's headline figure. */
+.qcard-score { display: flex; align-items: center; gap: 14px; margin-top: 16px; }
+.qcard-score-num { font-size: 40px; font-weight: 750; letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; }
+.qcard-score-max { font-size: 17px; font-weight: 600; opacity: 0.55; }
+.qcard-score-side { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; min-width: 0; flex: 1; }
+.qcard-score-band { font-size: 13px; font-weight: 650; text-transform: capitalize; }
+/* On a dense card the delta is the number and its direction; the "clinically
+   meaningful" wording stays in the tooltip and the preview rather than wrapping
+   the badge onto two lines. */
+.qcard-score .delta { white-space: nowrap; }
+.qcard-score .delta-flag { display: none; }
+.qcard-score .delta.meaningful::after { content: '!'; font-weight: 800; }
+.qcard-score .sparkline { flex: 0 0 auto; margin-right: 2px; }
+.qcard-noscore { margin-top: 16px; font-size: 13.5px; color: var(--muted); }
+/* Cards in a row share a bottom edge, and the footer stays pinned to it. */
+.qcard { display: flex; flex-direction: column; }
+.qcard-foot { margin-top: auto; }
+
+/* Reasons as chips rather than a bulleted paragraph. */
+.qcard-flags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.qcard-flags .flag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  border: 1px solid var(--line-2); background: var(--surface-3); color: var(--ink-2);
+  white-space: nowrap;
+}
+.qcard-flags .flag svg { width: 13px; height: 13px; }
+.qcard-flags .flag.critical { background: var(--critical-bg); color: var(--critical); border-color: var(--critical-line); }
+.qcard-flags .flag.urgent { background: var(--urgent-bg); color: var(--urgent); border-color: var(--urgent-line); }
+.qcard-flags .flag.more { color: var(--muted); }
+
+/* Icon-led metrics instead of four label/value pairs. */
+.qcard-icons {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line);
+  font-size: 13px; font-weight: 600; color: var(--ink-2);
+}
+.qcard-icons > span { display: inline-flex; align-items: center; gap: 6px; }
+.qcard-icons svg { width: 15px; height: 15px; color: var(--muted); }
+.qcard-icons .pa {
+  padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  background: var(--urgent-bg); color: var(--urgent); border: 1px solid var(--urgent-line);
+}
 .qcard-facts {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px;
   margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
