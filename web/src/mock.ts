@@ -100,6 +100,7 @@ const resources: any[] = [
   patient('p-eshan', 'Eshan', 'Toshniwal', '1990-01-01', '+16505129410', 3 * D),
 
   carePlan('cp-maria', M, 'Asthma plan — Very poorly controlled (ACT 10)', 'draft', 21 * H, ['m1', 'm2', 'm3']),
+  carePlan('cp-maria-older', M, 'Asthma plan — Poorly controlled (ACT 13)', 'draft', 3 * D, ['m1']),
   carePlan('cp-saket', 'p-saket', 'Asthma plan — Poorly controlled (ACT 13)', 'draft', 1 * H, ['m1']),
   carePlan('cp-eshan', 'p-eshan', 'Asthma plan — Not well controlled (ACT 17)', 'draft', 2 * D, ['m1']),
   carePlan('cp-maria-prev', M, 'Asthma plan — Not well controlled (ACT 16)', 'active', 30 * D),

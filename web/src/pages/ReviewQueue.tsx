@@ -52,6 +52,59 @@ function flagIcon(code: string): JSX.Element {
 
 type Sort = 'urgent' | 'newest' | 'oldest';
 
+/**
+ * Collapse a patient's pending drafts into the one card that represents them.
+ *
+ * The newest draft is the one a clinician acts on — it is `plan`, so approving
+ * still approves a real, whole CarePlan and never a synthesised blend. But the
+ * newest draft is not always the most *complete*: a repeat check-in where the
+ * patient hung up early can lack the coverage answer or the safety findings an
+ * earlier call captured. So every other field takes the newest value that
+ * exists, walking back through older drafts to fill a gap rather than dropping
+ * what was already collected.
+ *
+ * Rows that have not finished loading are skipped as sources, so a pending
+ * fetch cannot mask a value that is genuinely there.
+ */
+function mergeDrafts(ordered: EnrichedPlan[]): EnrichedPlan {
+  const [newest, ...older] = ordered;
+  if (!newest || older.length === 0) return newest!;
+  const sources = ordered.filter((r) => r.loaded);
+
+  // First defined value, newest first.
+  function pick<K extends keyof EnrichedPlan>(key: K): EnrichedPlan[K] {
+    for (const source of sources) {
+      const value = source[key];
+      if (value !== undefined && value !== null) return value;
+    }
+    return newest![key];
+  }
+
+  return {
+    ...newest,
+    // Identity and what gets approved always come from the newest draft.
+    plan: newest.plan,
+    name: newest.name,
+    scoreTotal: pick('scoreTotal'),
+    trendPoints: pick('trendPoints'),
+    priorScores: pick('priorScores'),
+    conditionText: pick('conditionText'),
+    consensus: pick('consensus'),
+    panelAgree: pick('panelAgree'),
+    panelTotal: pick('panelTotal'),
+    copayUsd: pick('copayUsd'),
+    priorAuthRequired: pick('priorAuthRequired'),
+    covered: pick('covered'),
+    recap: pick('recap'),
+    // Findings are a worst-case union: a risk surfaced on any pending draft is
+    // still a risk for this patient, so it must not disappear by being on the
+    // older one.
+    safetyCritical: Math.max(...sources.map((r) => r.safetyCritical ?? 0), newest.safetyCritical ?? 0),
+    safetyWarning: Math.max(...sources.map((r) => r.safetyWarning ?? 0), newest.safetyWarning ?? 0),
+    loaded: sources.length > 0 ? true : newest.loaded,
+  };
+}
+
 /** Patients sharing a score collapse to one marker, ascending by score. */
 function groupByScore(
   patients: Array<{ name: string; total: number }>,
@@ -95,12 +148,36 @@ export function ReviewQueuePage({
   const [hoveredDot, setHoveredDot] = useState<string>();
   const [insightsOpen, setInsightsOpen] = useState(false);
 
+  /**
+   * One card per patient.
+   *
+   * Repeat check-ins each write their own draft, so a patient who was called
+   * three times filled three slots in the queue with the same clinical picture.
+   * Only the newest draft reflects where they actually are, so that is the one
+   * shown; the older drafts are counted on the card and approving is still
+   * per-plan, so nothing is silently lost.
+   */
+  const consolidated = useMemo(() => {
+    const byPatient = new Map<string, EnrichedPlan[]>();
+    for (const row of rows) {
+      const key = row.plan.subject?.reference ?? row.plan.id ?? '';
+      byPatient.set(key, [...(byPatient.get(key) ?? []), row]);
+    }
+    return [...byPatient.values()].map((group) => {
+      const ordered = [...group].sort((a, b) =>
+        (b.plan.created ?? '').localeCompare(a.plan.created ?? ''),
+      );
+      return { row: mergeDrafts(ordered), superseded: ordered.slice(1) };
+    });
+  }, [rows]);
+
   const triaged = useMemo(
     () =>
-      rows.map((row) => {
+      consolidated.map(({ row, superseded }) => {
         const scale = scaleForText(row.conditionText ?? row.plan.title);
         return {
           row,
+          superseded,
           scale,
           t: triage({
             created: row.plan.created,
@@ -115,7 +192,7 @@ export function ReviewQueuePage({
           }),
         };
       }),
-    [rows],
+    [consolidated],
   );
 
   const counts = {
@@ -171,8 +248,8 @@ export function ReviewQueuePage({
         <div>
           <h1>Review queue</h1>
           <p className="sub">
-            {rows.length} voice-charted draft plan{rows.length === 1 ? '' : 's'} ready for clinician
-            sign-off.
+            {triaged.length} patient{triaged.length === 1 ? '' : 's'} awaiting clinician sign-off
+            {rows.length !== triaged.length && ` · ${rows.length} pending drafts`}.
             {orphaned > 0 && (
               <>
                 {' '}
@@ -188,7 +265,7 @@ export function ReviewQueuePage({
       <div style={{ marginBottom: 16 }}>
         <MetricStrip
           items={[
-            { label: 'Awaiting review', value: rows.length, tone: 'brand' },
+            { label: 'Awaiting review', value: triaged.length, tone: 'brand' },
             { label: 'Critical', value: counts.critical, tone: counts.critical ? 'critical' : 'routine' },
             { label: 'Urgent', value: counts.urgent, tone: counts.urgent ? 'urgent' : 'routine' },
             { label: 'Routine', value: counts.routine, tone: 'ok' },
@@ -293,7 +370,7 @@ export function ReviewQueuePage({
       <div className="queue-controls">
         <div className="chips">
           <span className="small muted">Show</span>
-          <Chip active={filter === 'all'} onClick={() => setFilter('all')}>All ({rows.length})</Chip>
+          <Chip active={filter === 'all'} onClick={() => setFilter('all')}>All ({triaged.length})</Chip>
           <Chip active={filter === 'critical'} onClick={() => setFilter('critical')}>Critical ({counts.critical})</Chip>
           <Chip active={filter === 'urgent'} onClick={() => setFilter('urgent')}>Urgent ({counts.urgent})</Chip>
           <Chip active={filter === 'routine'} onClick={() => setFilter('routine')}>Routine ({counts.routine})</Chip>
@@ -326,7 +403,7 @@ export function ReviewQueuePage({
         <Card><Empty>No {filter} plans in the queue.</Empty></Card>
       ) : (
         <div className="queue-grid">
-          {shown.map(({ row, scale, t }) => {
+          {shown.map(({ row, superseded, scale, t }) => {
             const band = row.scoreTotal != null ? bandForScore(scale, row.scoreTotal) : undefined;
             return (
               <article key={row.plan.id} className={`qcard ${t.level}`}>
@@ -338,6 +415,23 @@ export function ReviewQueuePage({
                   </div>
                   <Badge tone={LEVEL_TONE[t.level]}>{t.level}</Badge>
                 </header>
+
+                {/* Older pending drafts from earlier check-ins. Disclosed, not
+                    hidden: each is still its own plan and still needs a
+                    decision — this card just leads with the current one. */}
+                {superseded.length > 0 && (
+                  <p
+                    className="qcard-super"
+                    title={
+                      `Approving acts on the newest draft. Earlier pending drafts:\n` +
+                      superseded
+                        .map((s) => `· ${s.plan.title ?? 'Care plan'} — ${relativeTime(s.plan.created)}`)
+                        .join('\n')
+                    }
+                  >
+                    {Icon.list()} Newest of {superseded.length + 1} pending · earlier check-ins merged in
+                  </p>
+                )}
 
                 {/* The score reads as a figure, with the meter placing it on
                     the instrument and the delta showing direction — no prose. */}

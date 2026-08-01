@@ -814,6 +814,13 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
 .qcard-score .delta.meaningful::after { content: '!'; font-weight: 800; }
 .qcard-score .sparkline { flex: 0 0 auto; margin-right: 2px; }
 .qcard-noscore { margin-top: 16px; font-size: 13.5px; color: var(--muted); }
+.qcard-super {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; color: var(--ink-2);
+  background: var(--surface-3); border: 1px solid var(--line);
+}
+.qcard-super svg { width: 13px; height: 13px; color: var(--muted); }
 /* Cards in a row share a bottom edge, and the footer stays pinned to it. */
 .qcard { display: flex; flex-direction: column; }
 .qcard-foot { margin-top: auto; }
