@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { BandMeter, DeltaBadge, ScoreTrendChart, SeverityBar, type Segment } from '../clinical/charts';
 import { bandForScore, scaleForText, toneMark, toneVars } from '../clinical/scale';
 import { triage, type TriageLevel } from '../clinical/triage';
-import { usePlanQueue, type EnrichedPlan } from '../data';
+import { actionableRows, usePlanQueue, type EnrichedPlan } from '../data';
 import { Avatar, Badge, Card, Chip, Empty, Icon, MetricStrip, Modal, Skeleton, Sparkline, relativeTime, type Tone } from '../ui';
 
 const CONSENSUS_LABEL: Record<string, string> = {
@@ -68,7 +68,10 @@ export function ReviewQueuePage({
   loading?: boolean;
   onOpenPlan: (plan: CarePlan) => void;
 }): JSX.Element {
-  const { rows } = usePlanQueue(plans);
+  const { rows: allRows } = usePlanQueue(plans);
+  // A plan whose patient record is gone is not work anyone can do, so it is
+  // kept out of the queue — but counted, never silently swallowed.
+  const { rows, orphaned } = actionableRows(allRows);
   const [filter, setFilter] = useState<'all' | TriageLevel>('all');
   const [sort, setSort] = useState<Sort>('urgent');
   const [preview, setPreview] = useState<EnrichedPlan>();
@@ -151,8 +154,16 @@ export function ReviewQueuePage({
         <div>
           <h1>Review queue</h1>
           <p className="sub">
-            {plans.length} voice-charted draft plan{plans.length === 1 ? '' : 's'} ready for clinician
+            {rows.length} voice-charted draft plan{rows.length === 1 ? '' : 's'} ready for clinician
             sign-off — sorted by who needs you most.
+            {orphaned > 0 && (
+              <>
+                {' '}
+                <span title="These plans reference a patient record that no longer exists, so there is nobody to review them for.">
+                  {orphaned} hidden — patient record unavailable.
+                </span>
+              </>
+            )}
           </p>
         </div>
       </header>
@@ -160,7 +171,7 @@ export function ReviewQueuePage({
       <div style={{ marginBottom: 16 }}>
         <MetricStrip
           items={[
-            { label: 'Awaiting review', value: plans.length, tone: 'brand' },
+            { label: 'Awaiting review', value: rows.length, tone: 'brand' },
             { label: 'Critical', value: counts.critical, tone: counts.critical ? 'critical' : 'routine' },
             { label: 'Urgent', value: counts.urgent, tone: counts.urgent ? 'urgent' : 'routine' },
             { label: 'Routine', value: counts.routine, tone: 'ok' },
@@ -259,7 +270,7 @@ export function ReviewQueuePage({
       <div className="queue-controls">
         <div className="chips">
           <span className="small muted">Show</span>
-          <Chip active={filter === 'all'} onClick={() => setFilter('all')}>All ({plans.length})</Chip>
+          <Chip active={filter === 'all'} onClick={() => setFilter('all')}>All ({rows.length})</Chip>
           <Chip active={filter === 'critical'} onClick={() => setFilter('critical')}>Critical ({counts.critical})</Chip>
           <Chip active={filter === 'urgent'} onClick={() => setFilter('urgent')}>Urgent ({counts.urgent})</Chip>
           <Chip active={filter === 'routine'} onClick={() => setFilter('routine')}>Routine ({counts.routine})</Chip>
@@ -282,7 +293,7 @@ export function ReviewQueuePage({
 
       {loading && rows.length === 0 ? (
         <Card><Skeleton rows={4} /></Card>
-      ) : plans.length === 0 ? (
+      ) : rows.length === 0 ? (
         <Card>
           <Empty title="Queue is clear">
             A draft plan appears here within about 15 seconds of a check-in call ending.

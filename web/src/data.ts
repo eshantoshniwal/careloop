@@ -129,6 +129,15 @@ export function usePatients(pollMs = 20000): { patients: Patient[]; refresh: () 
   return { patients, refresh: useCallback(() => setTick((t) => t + 1), []) };
 }
 
+/**
+ * Sentinel for a plan whose Patient no longer resolves.
+ *
+ * A deleted patient leaves its CarePlans behind, and those plans are not work a
+ * clinician can do — there is no one to treat. The queue drops them rather than
+ * showing a nameless row, which previously read as the app being broken.
+ */
+export const MISSING_PATIENT = '__missing_patient__';
+
 /** Patient reference → display name, resolved once and cached for the session. */
 const nameCache = new Map<string, string>();
 
@@ -151,7 +160,10 @@ export function usePatientNames(references: Array<string | undefined>): Map<stri
           const patient = await medplum.readResource('Patient', id);
           nameCache.set(reference, displayName(patient));
         } catch {
-          nameCache.set(reference, 'Unknown patient');
+          // The patient record is gone (deleted, or outside this session's
+          // scope). Marked distinctly so callers can drop an unactionable row
+          // rather than render it as a nameless plan.
+          nameCache.set(reference, MISSING_PATIENT);
         }
       }),
     ).then(() => !cancelled && setNames(new Map(nameCache)));
@@ -471,6 +483,8 @@ export interface EnrichedPlan {
   recap?: string;
   conditionText?: string;
   loaded: boolean;
+  /** The plan's Patient no longer resolves — the row is not actionable. */
+  orphaned: boolean;
 }
 
 function parseCoverage(text: string): Pick<EnrichedPlan, 'copayUsd' | 'covered' | 'priorAuthRequired'> {
@@ -560,9 +574,11 @@ export function usePlanQueue(plans: CarePlan[]): { rows: EnrichedPlan[]; loading
 
   const rows = plans.map((plan) => {
     const extra = byPlan.get(plan.id ?? '') ?? {};
+    const resolved = names.get(plan.subject?.reference ?? '');
     return {
       plan,
-      name: names.get(plan.subject?.reference ?? '') ?? 'Loading…',
+      orphaned: resolved === MISSING_PATIENT,
+      name: resolved === MISSING_PATIENT ? 'Patient record unavailable' : resolved ?? 'Loading…',
       conditionText: plan.title,
       medicationCount: (plan.activity ?? []).filter((a) =>
         a.reference?.reference?.startsWith('MedicationRequest/'),
@@ -578,6 +594,12 @@ export function usePlanQueue(plans: CarePlan[]): { rows: EnrichedPlan[]; loading
   });
 
   return { rows, loading };
+}
+
+/** Rows a clinician can actually act on, plus how many were dropped and why. */
+export function actionableRows(rows: EnrichedPlan[]): { rows: EnrichedPlan[]; orphaned: number } {
+  const usable = rows.filter((r) => !r.orphaned);
+  return { rows: usable, orphaned: rows.length - usable.length };
 }
 
 /**
