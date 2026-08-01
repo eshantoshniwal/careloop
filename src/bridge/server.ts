@@ -15,7 +15,7 @@ import { recordCall } from '../integrations/calllog.js';
 import { logger } from '../logger.js';
 import { UnresolvedModuleError, loadPatientContext } from '../orchestration/context.js';
 import { createIntake } from '../orchestration/intake.js';
-import { approvePlan } from '../orchestration/plan.js';
+import { approvePlan, unapprovePlan } from '../orchestration/plan.js';
 import {
   CallSession,
   activeSessionCount,
@@ -326,6 +326,22 @@ app.post('/plans/approve', requireSecret, async (req, res) => {
   }
   const result = await approvePlan(parsed.data);
   res.status(result.approved ? 200 : 409).json(result);
+});
+
+const unapproveSchema = z.object({
+  carePlanId: z.string().min(1),
+  reverserReference: z.string().optional(),
+  reason: z.string().max(500).optional(),
+});
+
+app.post('/plans/unapprove', requireSecret, async (req, res) => {
+  const parsed = unapproveSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid request', issues: parsed.error.issues });
+    return;
+  }
+  const result = await unapprovePlan(parsed.data);
+  res.status(result.reverted ? 200 : 409).json(result);
 });
 
 // ---------------------------------------------------------------------------

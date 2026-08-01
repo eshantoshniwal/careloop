@@ -108,3 +108,7 @@ export const approve = (input: {
   acknowledgedCriticalFlags: boolean;
   approverReference?: string;
 }) => request<{ approved: boolean; reason?: string }>('/plans/approve', input);
+
+/** Reverses an approval: the plan and its orders return to draft for review. */
+export const unapprove = (input: { carePlanId: string; reason?: string; reverserReference?: string }) =>
+  request<{ reverted: boolean; reason?: string }>('/plans/unapprove', input);

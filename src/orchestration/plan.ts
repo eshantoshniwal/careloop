@@ -407,3 +407,64 @@ export async function approvePlan(input: {
   logger.info({ carePlanId: input.carePlanId }, 'plan.approved');
   return { approved: true };
 }
+
+/**
+ * Undo an approval, returning the plan to the review queue.
+ *
+ * Approval activates real medication orders, so a misclick needs a way back.
+ * This is a *reversal*, not an erasure: the plan and its orders go back to
+ * draft and the review task is reopened, and a note records that the approval
+ * was withdrawn and by whom. Nothing is deleted, so the record still shows the
+ * approval happened and was undone.
+ */
+export async function unapprovePlan(input: {
+  carePlanId: string;
+  reverserReference?: string;
+  reason?: string;
+}): Promise<{ reverted: boolean; reason?: string }> {
+  const plans = await searchResources<CarePlan>('CarePlan', { _id: input.carePlanId });
+  const plan = plans[0];
+  if (!plan) return { reverted: false, reason: 'CarePlan not found.' };
+  if (plan.status !== 'active') {
+    return { reverted: false, reason: `Only an approved plan can be reverted (this one is ${plan.status}).` };
+  }
+
+  for (const activity of plan.activity ?? []) {
+    const reference = activity.reference?.reference;
+    if (!reference?.startsWith('MedicationRequest/')) continue;
+    const id = reference.split('/')[1];
+    if (!id) continue;
+    const requests = await searchResources<MedicationRequest>('MedicationRequest', { _id: id });
+    const request = requests[0];
+    if (request) {
+      await updateResource<MedicationRequest>({ ...request, status: 'draft', intent: 'proposal' });
+    }
+  }
+
+  const now = new Date().toISOString();
+  await updateResource<CarePlan>({
+    ...plan,
+    status: 'draft',
+    note: [
+      ...(plan.note ?? []),
+      {
+        text:
+          `Approval withdrawn at ${now}` +
+          `${input.reverserReference ? ` by ${input.reverserReference}` : ''}` +
+          `${input.reason ? `: ${input.reason}` : '.'}`,
+        time: now,
+      },
+    ],
+  });
+
+  // Reopen the review task so the plan shows as outstanding work again.
+  const tasks = await searchResources<Task>('Task', { focus: `CarePlan/${input.carePlanId}` });
+  for (const task of tasks) {
+    if (task.status === 'completed') {
+      await updateResource<Task>({ ...task, status: 'requested', lastModified: now });
+    }
+  }
+
+  logger.info({ carePlanId: input.carePlanId }, 'plan.approval.withdrawn');
+  return { reverted: true };
+}

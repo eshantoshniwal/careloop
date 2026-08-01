@@ -1,6 +1,6 @@
 import type { CarePlan, MedicationRequest } from '@medplum/fhirtypes';
 import { useRef, useState } from 'react';
-import { approve } from '../bridge';
+import { approve, unapprove } from '../bridge';
 import { CallDialog, type CallTarget } from '../components/CallDialog';
 import {
   CATEGORIES,
@@ -16,6 +16,7 @@ import {
   type Priority,
 } from '../data';
 import { Trend } from '../components/Trend';
+import { RxNormSelect } from '../components/RxNormSelect';
 import { BandMeter, ItemBreakdown, ScoreTrendChart } from '../clinical/charts';
 import { scaleForText } from '../clinical/scale';
 import { instrumentMeta, linkIdForLoinc } from '../clinical/items';
@@ -136,8 +137,10 @@ function MedicationRow({
   if (!editable) {
     return (
       <tr>
-        <td>{display}</td>
-        <td className="mono">{code}</td>
+        <td>
+          {display}
+          {code && <div className="small muted mono" style={{ marginTop: 3 }}>RxCUI {code}</div>}
+        </td>
         <td>{sig}</td>
         <td><Badge tone="ok">{request.status}</Badge></td>
       </tr>
@@ -147,12 +150,16 @@ function MedicationRow({
   return (
     <tr>
       <td>
-        <input aria-label="Medication" value={display}
-          onChange={(e) => { setDisplay(e.target.value); setDirty(true); }} />
-      </td>
-      <td style={{ width: 130 }}>
-        <input aria-label="RxNorm code" className="mono" value={code}
-          onChange={(e) => { setCode(e.target.value); setDirty(true); }} />
+        {/* Picking a concept sets the code and the display together, so the
+            pair can never drift out of sync the way two free-text fields can. */}
+        <RxNormSelect
+          value={{ code, display }}
+          onChange={(next) => {
+            setDisplay(next.display);
+            setCode(next.code);
+            setDirty(true);
+          }}
+        />
       </td>
       <td>
         <input aria-label="Directions" value={sig}
@@ -196,6 +203,7 @@ export function ReviewPage({
   const [note, setNote] = useState<string>();
   const [savingNote, setSavingNote] = useState(false);
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const [confirmUndo, setConfirmUndo] = useState(false);
 
   // Worst first, for real — the list is triage-ordered, not recency-ordered.
   const ranked = [...summaries].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
@@ -270,6 +278,14 @@ export function ReviewPage({
   // otherwise whatever is already on the plan.
   const planNote = plan?.note?.map((n) => n.text).filter(Boolean).join('\n') ?? '';
   const noteValue = note ?? planNote;
+  // The bridge stamps the approval into the plan's notes; the latest one wins
+  // so a re-approval after a withdrawal shows the newer time.
+  const approvedAt = plan?.note
+    ?.map((n) => n.text ?? '')
+    .filter((t) => /^Approved at /i.test(t))
+    .map((t) => t.match(/Approved at (\S+?)(?:\s|\.|$)/)?.[1])
+    .filter(Boolean)
+    .pop();
 
   function applySuggestion(text: string): void {
     const trimmed = text.trim();
@@ -305,6 +321,30 @@ export function ReviewPage({
       setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Could not save the note.' });
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  async function onUndoApproval(): Promise<void> {
+    if (!plan?.id) return;
+    setBusy(true);
+    setMessage(undefined);
+    try {
+      const result = await unapprove({ carePlanId: plan.id });
+      if (result.reverted) {
+        setMessage({
+          kind: 'ok',
+          text: 'Approval withdrawn. The plan and its orders are back in draft, and the review task is open again.',
+        });
+        setReloadKey((k) => k + 1);
+        onChanged();
+      } else {
+        setMessage({ kind: 'error', text: result.reason ?? 'Could not withdraw the approval.' });
+      }
+    } catch (error) {
+      setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Could not withdraw the approval.' });
+    } finally {
+      setBusy(false);
+      setConfirmUndo(false);
     }
   }
 
@@ -599,7 +639,7 @@ export function ReviewPage({
               ) : (
                 <table>
                   <thead>
-                    <tr><th>Medication</th><th>RxNorm</th><th>Directions</th><th /></tr>
+                    <tr><th>Medication</th><th>Directions</th><th /></tr>
                   </thead>
                   <tbody>
                     {medications.map((request) => (
@@ -778,6 +818,43 @@ export function ReviewPage({
                   Approval sets the CarePlan and every drafted medication to active, and completes
                   the review task.
                 </p>
+              </Card>
+            )}
+
+            {/* Approved plans keep a way back — approval activates real orders,
+                so a misclick must be reversible. */}
+            {plan.status === 'active' && (
+              <Card title="Approved" padded>
+                <div className="notice ok" style={{ marginBottom: 14 }}>
+                  {Icon.check()} This plan is approved and its medications are active.
+                  {approvedAt && <> Approved {relativeTime(approvedAt)}.</>}
+                </div>
+                {message && <div className={`notice ${message.kind}`} style={{ marginBottom: 14 }}>{message.text}</div>}
+
+                {confirmUndo ? (
+                  <div className="ack">
+                    <p style={{ fontWeight: 600, marginBottom: 10 }}>
+                      Withdraw this approval?
+                    </p>
+                    <p className="small" style={{ marginBottom: 14 }}>
+                      The plan and its {medications.length} order{medications.length === 1 ? '' : 's'} return
+                      to draft and the review task reopens. The approval stays in the record as
+                      withdrawn — nothing is deleted.
+                    </p>
+                    <div style={{ display: 'flex', gap: 10 }}>
+                      <button className="btn" onClick={() => setConfirmUndo(false)} disabled={busy}>
+                        Keep approved
+                      </button>
+                      <button className="btn danger" onClick={onUndoApproval} disabled={busy}>
+                        {busy ? 'Withdrawing…' : 'Withdraw approval'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="btn" onClick={() => setConfirmUndo(true)} disabled={busy}>
+                    Undo approval
+                  </button>
+                )}
               </Card>
             )}
           </div>
