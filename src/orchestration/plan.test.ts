@@ -1,3 +1,4 @@
+import './test-offline.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { CarePlan, MedicationRequest, Task } from '@medplum/fhirtypes';
 import { clearMockStore, createResource, searchResources } from '../integrations/medplum.js';

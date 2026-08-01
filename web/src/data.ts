@@ -603,6 +603,24 @@ export function actionableRows(rows: EnrichedPlan[]): { rows: EnrichedPlan[]; or
 }
 
 /**
+ * Draft plans a clinician can actually act on.
+ *
+ * Filtered once, here, rather than in each view — the sidebar badge, the
+ * dashboard and the queue previously counted different things (the badge said
+ * 11 while the queue showed 7) because only the queue dropped plans whose
+ * patient no longer exists. One source, one number.
+ *
+ * Plans are returned unfiltered until their subjects resolve, so a slow lookup
+ * shows the queue rather than an empty screen.
+ */
+export function useActionablePlans(plans: CarePlan[]): { plans: CarePlan[]; orphaned: number } {
+  const references = useMemo(() => plans.map((p) => p.subject?.reference), [plans]);
+  const names = usePatientNames(references);
+  const usable = plans.filter((p) => names.get(p.subject?.reference ?? '') !== MISSING_PATIENT);
+  return { plans: usable, orphaned: plans.length - usable.length };
+}
+
+/**
  * Resolve one CarePlan by id, preferring a copy already in hand.
  *
  * A plan reached from a URL is not necessarily in the draft queue — an approved

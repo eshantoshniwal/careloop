@@ -1,3 +1,4 @@
+import './test-offline.js';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearMockStore } from '../integrations/medplum.js';
 import type { PatientContext } from '../types.js';

@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { BandMeter, DeltaBadge, ScoreTrendChart, SeverityBar, type Segment } from '../clinical/charts';
 import { bandForScore, scaleForText, toneMark, toneVars } from '../clinical/scale';
 import { triage, type TriageLevel } from '../clinical/triage';
-import { actionableRows, usePlanQueue, type EnrichedPlan } from '../data';
+import { usePlanQueue, type EnrichedPlan } from '../data';
 import { Avatar, Badge, Card, Chip, Empty, Icon, MetricStrip, Modal, Skeleton, Sparkline, relativeTime, type Tone } from '../ui';
 
 const CONSENSUS_LABEL: Record<string, string> = {
@@ -62,16 +62,16 @@ type Sort = 'urgent' | 'newest' | 'oldest';
 export function ReviewQueuePage({
   plans,
   loading,
+  orphaned = 0,
   onOpenPlan,
 }: {
   plans: CarePlan[];
   loading?: boolean;
+  /** Plans excluded upstream because their patient record no longer exists. */
+  orphaned?: number;
   onOpenPlan: (plan: CarePlan) => void;
 }): JSX.Element {
-  const { rows: allRows } = usePlanQueue(plans);
-  // A plan whose patient record is gone is not work anyone can do, so it is
-  // kept out of the queue — but counted, never silently swallowed.
-  const { rows, orphaned } = actionableRows(allRows);
+  const { rows } = usePlanQueue(plans);
   const [filter, setFilter] = useState<'all' | TriageLevel>('all');
   const [sort, setSort] = useState<Sort>('urgent');
   const [preview, setPreview] = useState<EnrichedPlan>();

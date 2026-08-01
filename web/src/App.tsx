@@ -2,7 +2,7 @@ import type { CarePlan } from '@medplum/fhirtypes';
 import { useEffect, useState } from 'react';
 import { getHealth, type BridgeHealth } from './bridge';
 import { SignIn } from './components/SignIn';
-import { useCarePlan, useDraftPlans, useLiveFeed, usePatients } from './data';
+import { useActionablePlans, useCarePlan, useDraftPlans, useLiveFeed, usePatients } from './data';
 import { useHashLocation, type Route as HashRoute } from './router';
 import { CallsPage } from './pages/Calls';
 import { DashboardPage } from './pages/Dashboard';
@@ -51,7 +51,10 @@ export function App(): JSX.Element {
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [navOpen, setNavOpen] = useState(false);
 
-  const { plans, loading, refresh } = useDraftPlans();
+  const { plans: allPlans, loading, refresh } = useDraftPlans();
+  // One source of truth for "how many plans are waiting": a plan whose patient
+  // record is gone is not reviewable, so it must not be counted anywhere.
+  const { plans, orphaned } = useActionablePlans(allPlans);
   const { patients } = usePatients();
 
   // The URL is the source of truth for what is on screen, so a reload or a
@@ -206,7 +209,7 @@ export function App(): JSX.Element {
                 onOpenLive={openLive}
               />
             ) : (
-              <ReviewQueuePage plans={plans} loading={loading} onOpenPlan={openPlan} />
+              <ReviewQueuePage plans={plans} loading={loading} orphaned={orphaned} onOpenPlan={openPlan} />
             )
           )}
           {route === 'calls' && <CallsPage onOpenPatient={openPatient} />}
