@@ -95,7 +95,7 @@ const PANEL_TEXT = [
 ].join('\n\n');
 
 const resources: any[] = [
-  patient(M, 'Maria', 'Reyes', '1979-05-14', '+13215550111', 21 * H),
+  { ...patient(M, 'Maria', 'Reyes', '1979-05-14', '+13215550111', 21 * H), gender: 'female', address: [{ city: 'Oakland', state: 'CA' }] },
   patient('p-saket', 'Saket', 'Toshniwal', '1994-07-14', '+13219399699', 1 * H),
   patient('p-eshan', 'Eshan', 'Toshniwal', '1990-01-01', '+16505129410', 3 * D),
 

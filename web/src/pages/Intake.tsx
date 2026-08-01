@@ -20,7 +20,11 @@ export function IntakePage({
   const [familyName, setFamilyName] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [phone, setPhone] = useState('');
+  const [gender, setGender] = useState('');
+  const [city, setCity] = useState('');
+  const [stateRegion, setStateRegion] = useState('');
   const [payerId, setPayerId] = useState('');
+  const [payerName, setPayerName] = useState('');
   const [memberId, setMemberId] = useState('');
   const [allergies, setAllergies] = useState('');
   const [triggers, setTriggers] = useState('');
@@ -50,7 +54,12 @@ export function IntakePage({
         familyName,
         birthDate,
         phone,
-        ...(payerId && memberId ? { coverage: { payerId, memberId } } : {}),
+        ...(gender ? { gender: gender as 'male' | 'female' | 'other' | 'unknown' } : {}),
+        ...(city ? { city } : {}),
+        ...(stateRegion ? { state: stateRegion } : {}),
+        ...(payerId && memberId
+          ? { coverage: { payerId, memberId, ...(payerName ? { payerName } : {}) } }
+          : {}),
         allergies: allergies.split(',').map((s) => s.trim()).filter(Boolean),
         triggers: triggers.split(',').map((s) => s.trim()).filter(Boolean),
       });
@@ -142,6 +151,24 @@ export function IntakePage({
                   <label htmlFor="phone">Phone (E.164)</label>
                   <input id="phone" placeholder="+15555550123" value={phone} onChange={(e) => setPhone(e.target.value)} required />
                 </div>
+                <div>
+                  <label htmlFor="gender">Sex</label>
+                  <select id="gender" value={gender} onChange={(e) => setGender(e.target.value)}>
+                    <option value="">Not recorded</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="city">City</label>
+                  <input id="city" placeholder="Oakland" value={city} onChange={(e) => setCity(e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="state">State</label>
+                  <input id="state" placeholder="CA" value={stateRegion} onChange={(e) => setStateRegion(e.target.value)} />
+                </div>
               </div>
             </fieldset>
 
@@ -151,6 +178,10 @@ export function IntakePage({
                 <div>
                   <label htmlFor="payer">Payer ID</label>
                   <input id="payer" value={payerId} onChange={(e) => setPayerId(e.target.value)} />
+                </div>
+                <div>
+                  <label htmlFor="payerName">Plan name</label>
+                  <input id="payerName" placeholder="Gold Plan HMO" value={payerName} onChange={(e) => setPayerName(e.target.value)} />
                 </div>
                 <div>
                   <label htmlFor="member">Member ID</label>

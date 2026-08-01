@@ -80,6 +80,9 @@ export interface IntakePayload {
   familyName: string;
   birthDate: string;
   phone: string;
+  gender?: 'male' | 'female' | 'other' | 'unknown';
+  city?: string;
+  state?: string;
   coverage?: { payerId: string; payerName?: string; memberId: string };
   allergies?: string[];
   triggers?: string[];

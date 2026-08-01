@@ -25,6 +25,9 @@ export interface IntakeRequest {
   /** YYYY-MM-DD */
   birthDate: string;
   phone: string;
+  gender?: 'male' | 'female' | 'other' | 'unknown';
+  city?: string;
+  state?: string;
   coverage?: {
     payerId: string;
     payerName?: string;
@@ -100,6 +103,10 @@ export async function createIntake(request: IntakeRequest): Promise<IntakeResult
     name: [{ given: [request.givenName], family: request.familyName }],
     birthDate: request.birthDate,
     telecom: [{ system: 'phone', value: request.phone, use: 'mobile' }],
+    ...(request.gender ? { gender: request.gender } : {}),
+    ...(request.city || request.state
+      ? { address: [{ city: request.city, state: request.state }] }
+      : {}),
   });
   if (!patient.id) throw new Error('Patient creation returned no id');
 

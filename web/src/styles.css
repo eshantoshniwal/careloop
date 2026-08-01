@@ -638,7 +638,20 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
 .persona-head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
 .persona-head .who { font-weight: 650; font-size: 14px; }
 .persona-body { font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
-.persona-edit { margin-top: 9px; font-size: 13px; color: var(--ink-2); border-left: 2px solid var(--brand-line); padding-left: 11px; }
+.persona-edit {
+  display: flex; align-items: flex-start; gap: 12px;
+  margin-top: 10px; padding: 10px 12px;
+  font-size: 13px; color: var(--ink-2); line-height: 1.6;
+  background: var(--urgent-bg); border: 1px solid var(--urgent-line); border-radius: var(--r-sm);
+}
+.persona-edit .btn { flex: 0 0 auto; padding: 5px 12px; font-size: 12.5px; }
+
+/* The rule that fired, above its plain-language explanation. */
+.risk-code {
+  display: inline-block; margin-left: 8px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted);
+}
 
 /* Small inline meta pills. */
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-3); color: var(--ink-2); border: 1px solid var(--line); }

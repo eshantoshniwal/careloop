@@ -10,6 +10,7 @@ import {
   hasCriticalFlag,
   idFromReference,
   saveMedication,
+  savePlanNote,
   useReviewData,
   usePlanSummaries,
   type Priority,
@@ -67,6 +68,33 @@ function stanceTone(stance: string): Tone {
   if (/concern|revise|caution/.test(stance)) return 'urgent';
   if (/approve|agree|endorse|ok/.test(stance)) return 'ok';
   return 'info';
+}
+
+/**
+ * The pipeline writes medication-safety findings and future-risk findings into
+ * one artifact. These are the medication-safety screen's own codes, so anything
+ * else in the artifact is a risk-rule finding and belongs in its own section —
+ * they answer different clinical questions ("is this order safe?" versus "how
+ * likely is this patient to deteriorate?").
+ */
+const SAFETY_CODES = new Set(['allergy-match', 'duplicate-therapy', 'interaction', 'note', 'risk-rules-failed']);
+
+function findingCode(line: string): string {
+  return line.replace(/^\[[a-z]+\]\s*/i, '').split(':')[0]?.trim() ?? '';
+}
+
+function isSafetyFinding(line: string): boolean {
+  return SAFETY_CODES.has(findingCode(line));
+}
+
+function findingText(line: string): string {
+  const withoutSeverity = line.replace(/^\[[a-z]+\]\s*/i, '');
+  const colon = withoutSeverity.indexOf(':');
+  return colon >= 0 ? withoutSeverity.slice(colon + 1).trim() : withoutSeverity;
+}
+
+function humanCode(code: string): string {
+  return code.replace(/-/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 }
 
 function MedicationRow({
@@ -163,6 +191,10 @@ export function ReviewPage({
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string }>();
   const [callTarget, setCallTarget] = useState<CallTarget>();
   const [filter, setFilter] = useState<'all' | Priority>('all');
+  // Clinician note: a panel suggestion is *proposed* text, so applying it drops
+  // it here for the reviewer to edit and save — it never rewrites an order.
+  const [note, setNote] = useState<string>();
+  const [savingNote, setSavingNote] = useState(false);
 
   // Worst first, for real — the list is triage-ordered, not recency-ordered.
   const ranked = [...summaries].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]);
@@ -181,9 +213,11 @@ export function ReviewPage({
   const critical = hasCriticalFlag(communications);
   const isDraft = plan?.status === 'draft';
 
-  const safetyLines = byCategory(communications, CATEGORIES.safety)
+  const allFindings = byCategory(communications, CATEGORIES.safety)
     .flatMap((c) => communicationText(c).split('\n'))
-    .filter(Boolean);
+    .filter((line) => Boolean(line) && !/^no safety or risk findings/i.test(line));
+  const safetyLines = allFindings.filter(isSafetyFinding);
+  const riskLines = allFindings.filter((line) => !isSafetyFinding(line));
   const concerns = byCategory(communications, CATEGORIES.concern).map(communicationText);
   const research = byCategory(communications, CATEGORIES.research).map(communicationText);
   const panel = byCategory(communications, CATEGORIES.panel);
@@ -230,6 +264,37 @@ export function ReviewPage({
         meta.higherIsBetter ? a.value - b.value : b.value - a.value,
       );
   })();
+
+  // The note shown is the working copy if the reviewer has started one,
+  // otherwise whatever is already on the plan.
+  const planNote = plan?.note?.map((n) => n.text).filter(Boolean).join('\n') ?? '';
+  const noteValue = note ?? planNote;
+
+  function applySuggestion(text: string): void {
+    const trimmed = text.trim();
+    if (!trimmed || !isDraft) return;
+    setNote((current) => {
+      const base = (current ?? planNote).trim();
+      return base.includes(trimmed) ? base : base ? `${base}\n${trimmed}` : trimmed;
+    });
+  }
+
+  async function saveNote(): Promise<void> {
+    if (!plan || note === undefined) return;
+    setSavingNote(true);
+    setMessage(undefined);
+    try {
+      await savePlanNote(plan, note);
+      setNote(undefined);
+      setReloadKey((k) => k + 1);
+      onChanged();
+      setMessage({ kind: 'ok', text: 'Clinician note saved to the plan.' });
+    } catch (error) {
+      setMessage({ kind: 'error', text: error instanceof Error ? error.message : 'Could not save the note.' });
+    } finally {
+      setSavingNote(false);
+    }
+  }
 
   async function onApprove(): Promise<void> {
     if (!plan?.id) return;
@@ -378,6 +443,14 @@ export function ReviewPage({
                 </div>
                 <div><dt>Date of birth</dt><dd>{patient?.birthDate ?? '—'}</dd></div>
                 <div>
+                  <dt>Location</dt>
+                  <dd>
+                    {[patient?.address?.[0]?.city, patient?.address?.[0]?.state]
+                      .filter(Boolean)
+                      .join(', ') || '—'}
+                  </dd>
+                </div>
+                <div>
                   <dt>Phone</dt>
                   <dd>{patientPhone ?? 'none on file'}</dd>
                 </div>
@@ -394,6 +467,9 @@ export function ReviewPage({
                 <span className="pill">{medications.length} drafted order{medications.length === 1 ? '' : 's'}</span>
                 {safetyLines.length > 0 && (
                   <span className="pill">{safetyLines.length} safety finding{safetyLines.length === 1 ? '' : 's'}</span>
+                )}
+                {riskLines.length > 0 && (
+                  <span className="pill">{riskLines.length} risk factor{riskLines.length === 1 ? '' : 's'}</span>
                 )}
                 {critical && <Badge tone="critical">critical flag</Badge>}
                 {concerns.length > 0 && <span className="pill">{concerns.length} concern{concerns.length === 1 ? '' : 's'}</span>}
@@ -455,10 +531,13 @@ export function ReviewPage({
               </Card>
             )}
 
-            {/* 3 — safety and risk */}
-            <Card title="Safety and risk" subtitle={`${safetyLines.length} finding${safetyLines.length === 1 ? '' : 's'}`}>
+            {/* 4 — medication safety */}
+            <Card
+              title="Medication safety"
+              subtitle={`Allergy, duplicate-therapy and interaction screen · ${safetyLines.length} finding${safetyLines.length === 1 ? '' : 's'}`}
+            >
               {safetyLines.length === 0 ? (
-                <Empty>No findings recorded.</Empty>
+                <Empty>No medication-safety findings on this regimen.</Empty>
               ) : (
                 safetyLines.map((line, i) => (
                   <div key={i} className={`finding ${severityOf(line)}`}>
@@ -467,14 +546,33 @@ export function ReviewPage({
                       <Badge tone={severityOf(line) === 'warning' ? 'urgent' : severityOf(line) === 'critical' ? 'critical' : 'info'}>
                         {severityOf(line)}
                       </Badge>
-                      <span style={{ display: 'block', marginTop: 5 }}>
-                        {line.replace(/^\[[a-z]+\]\s*/i, '')}
-                      </span>
+                      <span style={{ display: 'block', marginTop: 5 }}>{findingText(line)}</span>
                     </span>
                   </div>
                 ))
               )}
             </Card>
+
+            {/* 5 — future risk, which the control score alone does not capture */}
+            {riskLines.length > 0 && (
+              <Card
+                title="Future-risk factors"
+                subtitle={`Beyond the ${scale.instrument} control score · ${riskLines.length} finding${riskLines.length === 1 ? '' : 's'}`}
+              >
+                {riskLines.map((line, i) => (
+                  <div key={i} className={`finding ${severityOf(line)}`}>
+                    <span className="bar" />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <Badge tone={severityOf(line) === 'warning' ? 'urgent' : severityOf(line) === 'critical' ? 'critical' : 'info'}>
+                        {severityOf(line)}
+                      </Badge>
+                      <span className="risk-code">{humanCode(findingCode(line))}</span>
+                      <span style={{ display: 'block', marginTop: 5 }}>{findingText(line)}</span>
+                    </span>
+                  </div>
+                ))}
+              </Card>
+            )}
 
             {/* 4 — regimen */}
             <Card title="Drafted regimen" subtitle="Editable until approved">
@@ -550,7 +648,18 @@ export function ReviewPage({
                     <div className="persona-body">{review.rationale}</div>
                     {review.edit && (
                       <div className="persona-edit">
-                        <strong>Suggested edit:</strong> {review.edit}
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <strong>Suggested edit:</strong> {review.edit}
+                        </span>
+                        {isDraft && (
+                          <button
+                            className="btn"
+                            onClick={() => applySuggestion(review.edit!)}
+                            title="Add this suggestion to your clinician note"
+                          >
+                            Apply
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -583,6 +692,35 @@ export function ReviewPage({
                     <span>{communicationText(line)}</span>
                   </div>
                 ))}
+              </Card>
+            )}
+
+            {/* clinician note — where applied suggestions land */}
+            {isDraft && (
+              <Card
+                title="Clinician note"
+                subtitle="Applied suggestions and your own notes, saved onto the plan"
+                action={
+                  note !== undefined && (
+                    <button className="btn primary" onClick={saveNote} disabled={savingNote}>
+                      {savingNote ? 'Saving…' : 'Save note'}
+                    </button>
+                  )
+                }
+                padded
+              >
+                <textarea
+                  rows={4}
+                  value={noteValue}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Add a note for the record, or press Apply on an expert suggestion above."
+                  aria-label="Clinician note"
+                  style={{ resize: 'vertical', lineHeight: 1.6 }}
+                />
+                <p className="small muted" style={{ marginTop: 10 }}>
+                  Applying a suggestion copies its text here for you to edit — it never changes a
+                  drafted order on its own.
+                </p>
               </Card>
             )}
 

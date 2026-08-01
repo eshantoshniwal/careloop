@@ -96,7 +96,8 @@ describe('every page renders', () => {
     for (const panel of [
       'Asthma Control Test',
       'Drafted regimen',
-      'Safety and risk',
+      'Medication safety',
+      'Clinician note',
       'Evidence',
       'Expert panel',
       'Approval',

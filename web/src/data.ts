@@ -569,6 +569,21 @@ export async function saveMedication(request: MedicationRequest): Promise<Medica
   return medplum.updateResource(request);
 }
 
+/**
+ * Persist the clinician's note onto the plan.
+ *
+ * The note is stored as the plan's own annotation rather than folded into the
+ * drafted orders: a panel suggestion is advice, and the record should show that
+ * a human wrote this text, separately from what the pipeline proposed.
+ */
+export async function savePlanNote(plan: CarePlan, text: string): Promise<CarePlan> {
+  const trimmed = text.trim();
+  return medplum.updateResource({
+    ...plan,
+    note: trimmed ? [{ text: trimmed, time: new Date().toISOString() }] : undefined,
+  });
+}
+
 export function hasCriticalFlag(communications: Communication[]): boolean {
   return byCategory(communications, CATEGORIES.safety).some((c) =>
     communicationText(c).toLowerCase().includes('[critical]'),
