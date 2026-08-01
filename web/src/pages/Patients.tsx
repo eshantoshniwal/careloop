@@ -2,7 +2,7 @@ import type { Patient } from '@medplum/fhirtypes';
 import { useState } from 'react';
 import { CallDialog, type CallTarget } from '../components/CallDialog';
 import { displayName } from '../data';
-import { Avatar, Badge, Card, Empty, Icon, relativeTime } from '../ui';
+import { Avatar, Badge, Card, Empty, Icon, MetricStrip, relativeTime } from '../ui';
 
 export function PatientsPage({
   patients,
@@ -19,6 +19,10 @@ export function PatientsPage({
   const filtered = patients.filter((p) =>
     displayName(p).toLowerCase().includes(query.trim().toLowerCase()),
   );
+  const reachable = patients.filter((p) => p.telecom?.some((t) => t.system === 'phone' && t.value)).length;
+  const recent = patients.filter(
+    (p) => p.meta?.lastUpdated && Date.now() - new Date(p.meta.lastUpdated).getTime() < 7 * 86400000,
+  ).length;
 
   return (
     <>
@@ -28,7 +32,8 @@ export function PatientsPage({
           <p className="sub">{patients.length} in your workspace.</p>
         </div>
         <div className="spacer" />
-        <div style={{ width: 260 }}>
+        <div className="search-field" style={{ width: 260 }}>
+          <span className="search-ic">{Icon.search()}</span>
           <input
             placeholder="Search by name"
             value={query}
@@ -37,6 +42,16 @@ export function PatientsPage({
           />
         </div>
       </header>
+
+      <div style={{ marginBottom: 16 }}>
+        <MetricStrip
+          items={[
+            { label: 'Total patients', value: patients.length, tone: 'brand' },
+            { label: 'Reachable by phone', value: reachable, tone: 'ok' },
+            { label: 'Active this week', value: recent, tone: 'info' },
+          ]}
+        />
+      </div>
 
       {target && (
         <CallDialog

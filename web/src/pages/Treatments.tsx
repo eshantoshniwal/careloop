@@ -6,7 +6,7 @@ import {
   saveCondition,
   type ModuleSummary,
 } from '../bridge';
-import { Badge, Card, Empty, Icon } from '../ui';
+import { Badge, Card, Empty, Icon, MetricStrip } from '../ui';
 
 /**
  * Treatments admin.
@@ -106,8 +106,21 @@ export function TreatmentsPage(): JSX.Element {
           </p>
         </div>
         <div className="spacer" />
-        <button className="btn" onClick={reload} disabled={busy}>Reload registry</button>
+        <button className="btn" onClick={reload} disabled={busy}>{Icon.trend()} Reload registry</button>
       </header>
+
+      {modules.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <MetricStrip
+            items={[
+              { label: 'Modules registered', value: modules.length, tone: 'brand' },
+              { label: 'Instrument items', value: modules.reduce((n, m) => n + (m.items ?? 0), 0), tone: 'info' },
+              { label: 'Risk questions', value: modules.reduce((n, m) => n + (m.riskQuestions ?? 0), 0), tone: 'info' },
+              { label: 'Drafted orders', value: modules.reduce((n, m) => n + (m.medications ?? 0), 0), tone: 'ok' },
+            ]}
+          />
+        </div>
+      )}
 
       <div className="grid-review">
         <Card title="Modules" subtitle={`${modules.length} registered`}>

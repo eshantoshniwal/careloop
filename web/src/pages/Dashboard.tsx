@@ -1,7 +1,7 @@
 import type { CarePlan, Patient } from '@medplum/fhirtypes';
 import type { Route } from '../App';
 import { idFromReference, useCalls, usePatientNames, usePlanSummaries, type Priority } from '../data';
-import { Avatar, Badge, Card, Empty, Icon, Skeleton, Stat, relativeTime } from '../ui';
+import { Avatar, Badge, Card, Chip, Empty, Icon, Skeleton, Stat, relativeTime } from '../ui';
 
 const PRIORITY_RANK: Record<Priority, number> = { critical: 0, urgent: 1, routine: 2 };
 
@@ -59,9 +59,20 @@ export function DashboardPage({
         </div>
         <div className="spacer" />
         <button className="btn primary" onClick={() => onNavigate('intake')}>
-          New intake
+          {Icon.plus()} New intake
         </button>
       </header>
+
+      <div className="chips" style={{ marginBottom: 18 }}>
+        <span className="small muted" style={{ marginRight: 2 }}>Jump to</span>
+        <Chip onClick={() => onNavigate('review')}>
+          {Icon.list()} Review queue{plans.length > 0 && <span className="count">· {plans.length}</span>}
+        </Chip>
+        <Chip onClick={() => onNavigate('live')}>{Icon.live()} Live</Chip>
+        <Chip onClick={() => onNavigate('calls')}>{Icon.phone()} Calls</Chip>
+        <Chip onClick={() => onNavigate('patients')}>{Icon.users()} Patients</Chip>
+        <Chip onClick={() => onNavigate('treatments')}>{Icon.clipboard()} Treatments</Chip>
+      </div>
 
       <div className="grid-dash">
         <Card padded>
@@ -105,6 +116,7 @@ export function DashboardPage({
             label="Draft plans"
             sub="in the queue"
             tone="brand"
+            onClick={() => onNavigate('review')}
           />
           <Stat
             icon={Icon.phone()}
@@ -112,6 +124,7 @@ export function DashboardPage({
             label="Calls today"
             sub={`${calls.length} total`}
             tone="info"
+            onClick={() => onNavigate('calls')}
           />
           <Stat
             icon={Icon.users()}
@@ -119,6 +132,7 @@ export function DashboardPage({
             label="Patients"
             sub="in your workspace"
             tone="ok"
+            onClick={() => onNavigate('patients')}
           />
         </div>
       </div>

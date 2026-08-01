@@ -69,18 +69,94 @@ export function Card({
   );
 }
 
+/** A pill used for filters and quick actions. */
+export function Chip({
+  active,
+  onClick,
+  tone,
+  children,
+}: {
+  active?: boolean;
+  onClick?: () => void;
+  tone?: Tone;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      className={`chip${active ? ' active' : ''}${tone ? ` ${tone}` : ''}`}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A horizontal strip of compact label/value stats — a screen's vital signs. */
+export function MetricStrip({
+  items,
+}: {
+  items: Array<{ label: string; value: ReactNode; tone?: Tone }>;
+}): JSX.Element {
+  return (
+    <div className="statstrip">
+      {items.map((item, i) => (
+        <div key={i} className="statstrip-item">
+          <span className={`sv${item.tone ? ` ${item.tone}` : ''}`}>{item.value}</span>
+          <span className="sl">{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A tiny inline trend line for at-a-glance history in a row. */
+export function Sparkline({
+  values,
+  width = 76,
+  height = 24,
+  tone = 'brand',
+}: {
+  values: number[];
+  width?: number;
+  height?: number;
+  tone?: Tone;
+}): JSX.Element | null {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(max - min, 1);
+  const stroke = `var(--${tone === 'brand' ? 'brand' : tone})`;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * (width - 2) + 1;
+    const y = height - 2 - ((v - min) / span) * (height - 4);
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const lastX = width - 1;
+  const lastY = height - 2 - ((values[values.length - 1]! - min) / span) * (height - 4);
+  return (
+    <svg className="sparkline" width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden>
+      <path d={pts.join(' ')} fill="none" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastX - 1} cy={lastY} r="2.1" fill={stroke} />
+    </svg>
+  );
+}
+
 export function Stat({
   icon,
   value,
   label,
   sub,
   tone = 'brand',
+  onClick,
 }: {
   icon: ReactNode;
   value: ReactNode;
   label: string;
   sub?: string;
   tone?: Tone;
+  onClick?: () => void;
 }): JSX.Element {
   const bg: Record<Tone, string> = {
     critical: 'var(--critical-bg)',
@@ -98,16 +174,25 @@ export function Stat({
     info: 'var(--info)',
     brand: 'var(--brand)',
   };
-  return (
-    <section className="card card-pad">
+  const inner = (
+    <>
       <div className="stat-icon" style={{ background: bg[tone], color: fg[tone] }}>
         {icon}
       </div>
       <div className="stat-value">{value}</div>
       <div className="stat-label">{label}</div>
       {sub && <div className="stat-sub">{sub}</div>}
-    </section>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" className="card card-pad stat-btn" onClick={onClick}>
+        {inner}
+        <span className="stat-go" aria-hidden>{Icon.arrowRight()}</span>
+      </button>
+    );
+  }
+  return <section className="card card-pad">{inner}</section>;
 }
 
 /**

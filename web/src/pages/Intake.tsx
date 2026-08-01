@@ -105,9 +105,20 @@ export function IntakePage({
                   ))}
                 </select>
                 {selected && (
-                  <p className="small muted" style={{ marginTop: 8 }}>
-                    {selected.instrument} · {selected.items} items
-                  </p>
+                  <div style={{ marginTop: 10 }}>
+                    <p className="small muted" style={{ marginBottom: 8 }}>{selected.instrument}</p>
+                    <div className="pills">
+                      <span className="pill">{selected.items} items</span>
+                      {selected.riskQuestions !== undefined && (
+                        <span className="pill">{selected.riskQuestions} risk questions</span>
+                      )}
+                      {selected.bands !== undefined && <span className="pill">{selected.bands} bands</span>}
+                      {selected.medications !== undefined && (
+                        <span className="pill">{selected.medications} orders</span>
+                      )}
+                      {selected.icd10 && <span className="pill">ICD-10 {selected.icd10}</span>}
+                    </div>
+                  </div>
                 )}
               </div>
             </fieldset>

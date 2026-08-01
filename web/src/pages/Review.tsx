@@ -14,12 +14,52 @@ import {
   usePlanSummaries,
 } from '../data';
 import { Trend } from '../components/Trend';
-import { Avatar, Badge, Card, Empty, Icon, Skeleton, clockTime, relativeTime } from '../ui';
+import { Avatar, Badge, Card, Empty, Icon, Skeleton, clockTime, relativeTime, type Tone } from '../ui';
 
 function severityOf(line: string): 'critical' | 'warning' | 'info' {
   const lower = line.toLowerCase();
   if (lower.includes('[critical]')) return 'critical';
   if (lower.includes('[warning]')) return 'warning';
+  return 'info';
+}
+
+interface PanelReview {
+  persona: string;
+  specialty?: string;
+  stance: string;
+  rationale: string;
+  edit?: string;
+  ran: boolean;
+}
+
+/** Parse the stored panel text back into structured per-reviewer cards. */
+function parsePanel(text: string): PanelReview[] {
+  return text
+    .split('\n\n')
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => {
+      const [head = '', ...rest] = block.split('\n');
+      const ran = !/\[did not run\]/i.test(head);
+      const clean = head.replace(/\[did not run\]/i, '').trim();
+      const m = clean.match(/^(.+?)(?:\s*\((.+?)\))?\s*[—-]\s*(.+)$/);
+      const body = rest.join('\n');
+      const editIdx = body.indexOf('Suggested edit:');
+      return {
+        persona: m?.[1]?.trim() ?? clean,
+        specialty: m?.[2]?.trim(),
+        stance: (m?.[3] ?? '').trim().toLowerCase(),
+        rationale: (editIdx >= 0 ? body.slice(0, editIdx) : body).trim(),
+        edit: editIdx >= 0 ? body.slice(editIdx + 'Suggested edit:'.length).trim() : undefined,
+        ran,
+      };
+    });
+}
+
+function stanceTone(stance: string): Tone {
+  if (/reject|block|unsafe/.test(stance)) return 'critical';
+  if (/concern|revise|caution/.test(stance)) return 'urgent';
+  if (/approve|agree|endorse|ok/.test(stance)) return 'ok';
   return 'info';
 }
 
@@ -129,6 +169,9 @@ export function ReviewPage({
   const concerns = byCategory(communications, CATEGORIES.concern).map(communicationText);
   const research = byCategory(communications, CATEGORIES.research).map(communicationText);
   const panel = byCategory(communications, CATEGORIES.panel);
+  const panelText = panel.map(communicationText).join('\n\n');
+  const panelReviews = panelText ? parsePanel(panelText) : [];
+  const panelConsensus = panel[0]?.topic?.text?.split(/[—-]/).slice(1).join('-').trim().toLowerCase();
   const coverage = byCategory(communications, CATEGORIES.coverage).map(communicationText);
   const recap = byCategory(communications, CATEGORIES.recap).map(communicationText);
   const chart = byCategory(communications, CATEGORIES.chart);
@@ -138,6 +181,7 @@ export function ReviewPage({
     total: obs.valueQuantity?.value ?? 0,
   }));
   const trendMax = Math.max(25, ...trendPoints.map((p) => p.total));
+  const latestScore = trendPoints[trendPoints.length - 1]?.total;
 
   async function onApprove(): Promise<void> {
     if (!plan?.id) return;
@@ -238,8 +282,23 @@ export function ReviewPage({
               {/* The plan is one view of a patient, not an island — these are
                   the other two, so the reviewer never has to navigate by
                   memorising an id. */}
+              <div className="pills" style={{ marginTop: 14 }}>
+                {latestScore !== undefined && (
+                  <span className="pill">{Icon.trend()} ACT {latestScore}/25</span>
+                )}
+                <span className="pill">{medications.length} drafted order{medications.length === 1 ? '' : 's'}</span>
+                {safetyLines.length > 0 && (
+                  <span className="pill">{safetyLines.length} safety finding{safetyLines.length === 1 ? '' : 's'}</span>
+                )}
+                {critical && <Badge tone="critical">critical flag</Badge>}
+                {concerns.length > 0 && <span className="pill">{concerns.length} concern{concerns.length === 1 ? '' : 's'}</span>}
+              </div>
+
+              {/* The plan is one view of a patient, not an island — these are
+                  the other two, so the reviewer never has to navigate by
+                  memorising an id. */}
               {patientId && (
-                <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
                   <button className="btn" onClick={() => onOpenLive?.(patientId)}>
                     {Icon.live()} Charting feed
                   </button>
@@ -253,7 +312,7 @@ export function ReviewPage({
                   </button>
                 </div>
               )}
-              <p style={{ marginTop: 16, fontWeight: 600 }}>{plan.title}</p>
+              <p style={{ marginTop: 18, fontWeight: 600 }}>{plan.title}</p>
               <p className="muted" style={{ marginTop: 6 }}>{plan.description}</p>
               {plan.note?.map((note, i) => (
                 <p key={i} className="small muted" style={{ marginTop: 8 }}>{note.text}</p>
@@ -341,22 +400,38 @@ export function ReviewPage({
             </Card>
 
             {/* 7 — peer review */}
-            <Card title="Expert panel" subtitle="Decision support — not a clinical sign-off" padded>
-              {panel.length === 0 ? (
+            <Card
+              title="Expert panel"
+              subtitle="Decision support — not a clinical sign-off"
+              action={
+                panelConsensus && <Badge tone={stanceTone(panelConsensus)}>consensus: {panelConsensus}</Badge>
+              }
+              padded
+            >
+              {panelReviews.length === 0 ? (
                 <Empty>The expert panel did not run for this plan.</Empty>
               ) : (
-                panel.map((communication, i) => (
-                  <div key={i}>
-                    {communication.topic?.text && (
-                      <p className="small muted" style={{ marginBottom: 8 }}>
-                        {communication.topic.text}
-                      </p>
+                panelReviews.map((review, i) => (
+                  <div className="persona" key={i}>
+                    <div className="persona-head">
+                      <Avatar name={review.persona} small />
+                      <span className="who">{review.persona}</span>
+                      {review.specialty && <span className="pill">{review.specialty}</span>}
+                      <span style={{ flex: 1 }} />
+                      <Badge tone={review.ran ? stanceTone(review.stance) : 'routine'}>
+                        {review.ran ? review.stance || 'reviewed' : 'did not run'}
+                      </Badge>
+                    </div>
+                    <div className="persona-body">{review.rationale}</div>
+                    {review.edit && (
+                      <div className="persona-edit">
+                        <strong>Suggested edit:</strong> {review.edit}
+                      </div>
                     )}
-                    <pre className="artifact">{communicationText(communication)}</pre>
                   </div>
                 ))
               )}
-              <p className="small muted" style={{ marginTop: 12 }}>
+              <p className="small muted" style={{ marginTop: 14 }}>
                 These are model personas, not licensed clinicians. You remain the sole approver.
               </p>
             </Card>

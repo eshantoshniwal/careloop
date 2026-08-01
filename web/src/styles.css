@@ -571,3 +571,85 @@ button.link:hover { color: var(--brand-ink); text-decoration: underline; text-un
 *::-webkit-scrollbar-track { background: transparent; }
 
 ::selection { background: color-mix(in srgb, var(--brand) 26%, transparent); }
+
+/* ============================================================ view widgets */
+
+/* Filter / quick-action chips. */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 13px; border-radius: 999px; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--line-2); background: var(--surface); color: var(--ink-2);
+}
+.chip:hover { background: var(--surface-2); color: var(--ink); }
+.chip.active { background: var(--brand); border-color: var(--brand); color: #fff; box-shadow: var(--shadow); }
+.chip .count { font-variant-numeric: tabular-nums; opacity: 0.8; }
+
+/* A strip of compact stats — a view's vital signs above the fold. */
+.statstrip {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+  border: 1px solid var(--line); border-radius: var(--r-lg);
+  background: var(--surface); box-shadow: var(--shadow); overflow: hidden;
+}
+.statstrip-item { padding: 15px 20px; border-left: 1px solid var(--line); min-width: 0; }
+.statstrip-item:first-child { border-left: 0; }
+.statstrip .sv { display: block; font-size: 25px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.statstrip .sv.critical { color: var(--critical); } .statstrip .sv.urgent { color: var(--urgent); }
+.statstrip .sv.ok { color: var(--ok); } .statstrip .sv.info { color: var(--info); } .statstrip .sv.brand { color: var(--brand); }
+.statstrip .sl { display: block; margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+@media (max-width: 720px) { .statstrip { grid-auto-flow: row; grid-auto-columns: none; } .statstrip-item { border-left: 0; border-top: 1px solid var(--line); } .statstrip-item:first-child { border-top: 0; } }
+
+.sparkline { display: block; flex: 0 0 auto; }
+
+/* Clickable stat tile (dashboard). */
+.stat-btn { text-align: left; cursor: pointer; position: relative; display: block; width: 100%; }
+.stat-btn:hover { border-color: var(--brand-line); box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+.stat-go { position: absolute; top: 20px; right: 20px; color: var(--line-2); transition: transform 0.15s ease, color 0.15s ease; }
+.stat-btn:hover .stat-go { color: var(--brand); transform: translateX(3px); }
+
+/* Sticky in-page section navigation (review). */
+.section-nav {
+  position: sticky; top: 12px; align-self: start;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.section-nav a {
+  display: flex; align-items: center; gap: 9px; padding: 8px 12px;
+  border-radius: var(--r-sm); font-size: 13px; font-weight: 550;
+  color: var(--ink-2); text-decoration: none; border-left: 2px solid transparent;
+}
+.section-nav a:hover { background: var(--surface-2); color: var(--ink); }
+.section-nav a .n { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Expert-panel persona cards (review). */
+.persona { border: 1px solid var(--line); border-radius: var(--r); padding: 15px 17px; background: var(--surface-2); }
+.persona + .persona { margin-top: 12px; }
+.persona-head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.persona-head .who { font-weight: 650; font-size: 14px; }
+.persona-body { font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
+.persona-edit { margin-top: 9px; font-size: 13px; color: var(--ink-2); border-left: 2px solid var(--brand-line); padding-left: 11px; }
+
+/* Small inline meta pills. */
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface-3); color: var(--ink-2); border: 1px solid var(--line); }
+.pills { display: flex; gap: 7px; flex-wrap: wrap; }
+
+/* A tinted key metric block (patient hub header, live). */
+.metric { border: 1px solid var(--line); border-radius: var(--r); padding: 13px 16px; background: var(--surface-2); }
+.metric .mv { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.metric .ml { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+
+/* Day divider inside a list (calls, timelines). */
+.day-sep { padding: 10px 24px 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1; }
+
+/* A big live banner (live view). */
+.livebar { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); }
+.livebar.on { border-color: var(--critical-line); background: var(--critical-bg); }
+.livebar .beat { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); flex: 0 0 auto; }
+.livebar.on .beat { background: var(--critical); animation: pulse 1.4s ease-in-out infinite; }
+.livebar .lt { font-weight: 650; }
+.livebar .ls { color: var(--muted); font-size: 13px; }
+
+/* Search input with a leading icon. */
+.search-field { position: relative; }
+.search-field .search-ic { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; display: grid; }
+.search-field input { padding-left: 34px; }

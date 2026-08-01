@@ -70,6 +70,21 @@ export function LivePage({
         </Card>
 
         <div className="stack">
+          <div className={`livebar${live ? ' on' : ''}`}>
+            <span className="beat" />
+            <div style={{ minWidth: 0 }}>
+              <div className="lt">{live ? 'Charting live' : patient ? `${displayName(patient)} · idle` : 'Idle'}</div>
+              <div className="ls">
+                {live
+                  ? 'Documentation is being written as the patient answers'
+                  : 'Nothing has been charted in the last 30 seconds'}
+              </div>
+            </div>
+            <div style={{ flex: 1 }} />
+            <span className="pill">{chartLines.length} entries</span>
+            <span className="pill">{observations.length} coded</span>
+          </div>
+
           <Card
             title={patient ? displayName(patient) : 'Charting feed'}
             subtitle={

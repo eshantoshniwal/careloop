@@ -10,7 +10,7 @@ import {
   usePatientPlans,
 } from '../data';
 import { medplum } from '../medplum';
-import { Avatar, Badge, Card, Empty, Icon, clockTime, relativeTime } from '../ui';
+import { Avatar, Badge, Card, Empty, Icon, MetricStrip, Sparkline, clockTime, relativeTime } from '../ui';
 
 /**
  * The single place a patient comes together.
@@ -74,6 +74,9 @@ export function PatientPage({
   }));
   const trendMax = Math.max(25, ...trendPoints.map((p) => p.total));
   const latestScore = trendPoints[trendPoints.length - 1]?.total;
+  const priorScore = trendPoints[trendPoints.length - 2]?.total;
+  const delta = latestScore !== undefined && priorScore !== undefined ? latestScore - priorScore : undefined;
+  const sparkValues = trendPoints.map((p) => p.total);
 
   return (
     <>
@@ -115,6 +118,21 @@ export function PatientPage({
         />
       )}
 
+      <div style={{ marginBottom: 16 }}>
+        <MetricStrip
+          items={[
+            {
+              label: delta === undefined ? 'Latest ACT' : `Latest ACT (${delta > 0 ? '+' : ''}${delta} vs prior)`,
+              value: latestScore !== undefined ? `${latestScore}/25` : '—',
+              tone: latestScore === undefined ? 'brand' : latestScore >= 20 ? 'ok' : latestScore >= 16 ? 'info' : 'urgent',
+            },
+            { label: 'Draft plans', value: drafts.length, tone: drafts.length ? 'urgent' : 'brand' },
+            { label: 'Active plans', value: activePlans.length, tone: 'ok' },
+            { label: 'Calls', value: calls.length, tone: 'info' },
+          ]}
+        />
+      </div>
+
       <div className="grid-review">
         {/* Left rail — identity + at-a-glance numbers */}
         <div className="stack">
@@ -132,7 +150,12 @@ export function PatientPage({
               {email && <div><dt>Email</dt><dd>{email}</dd></div>}
               <div>
                 <dt>Latest ACT</dt>
-                <dd>{latestScore !== undefined ? `${latestScore} / 25` : 'no score yet'}</dd>
+                <dd style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                  {sparkValues.length >= 2 && (
+                    <Sparkline values={sparkValues} tone={latestScore !== undefined && latestScore >= 20 ? 'ok' : 'info'} />
+                  )}
+                  {latestScore !== undefined ? `${latestScore} / 25` : 'no score yet'}
+                </dd>
               </div>
               <div><dt>Record updated</dt><dd>{relativeTime(patient?.meta?.lastUpdated)}</dd></div>
             </dl>
