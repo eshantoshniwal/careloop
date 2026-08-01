@@ -70,8 +70,8 @@ export function buildIntakeFlow(module: ConditionModule): Flow {
   nodes.push({
     id: 'verify',
     kind: 'verify',
-    say: 'Before any clinical questions, verify identity: ask the patient for their date of birth. Do not read it out to them — ask them to tell you. Accept spoken formats such as "March fourteenth, nineteen eighty-five". If the first answer does not match or is unclear, gently ask them to say it once more — give them TWO tries. Only if it still does not match after the second try, say the clinic will follow up directly and end warmly. Never end on the very first mismatch.',
-    tools: [],
+    say: 'Before any clinical questions, verify identity. Ask the patient for their date of birth — do not read it out to them, ask them to tell you. As soon as they say it, call verifyIdentity with the date converted to YYYY-MM-DD. Do NOT judge the match yourself — the tool decides. Follow exactly what its result tells you: if it matches, move on; if not, it will tell you to give one more try, and only after a second failure to end warmly with a clinic follow-up. Never announce a mismatch or end the call unless verifyIdentity told you to.',
+    tools: ['verifyIdentity'],
     next: itemIds[0] ?? 'concerns',
   });
 

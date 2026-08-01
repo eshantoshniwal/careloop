@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearMockStore } from '../integrations/medplum.js';
 import type { PatientContext } from '../types.js';
-import { createCallState, dispatchTool, toCallOutcome } from './tools.js';
+import { createCallState, dispatchTool, parseDob, toCallOutcome } from './tools.js';
 
 const context: PatientContext = {
   patientId: 'p1',
@@ -103,6 +103,47 @@ describe('submitQuestionnaire', () => {
     await dispatchTool({ state: s, toolCallId: '2', name: 'submitQuestionnaire', args: {} });
     const second = await dispatchTool({ state: s, toolCallId: '3', name: 'submitQuestionnaire', args: {} });
     expect(second.say).toContain('Already submitted');
+  });
+});
+
+describe('parseDob', () => {
+  it('parses many spoken and written forms to the same date', () => {
+    for (const form of ['1979-05-14', 'May 14 1979', 'May 14, 1979', '14 May 1979', '5/14/1979', '05/14/1979']) {
+      expect(parseDob(form), form).toEqual({ y: 1979, m: 5, d: 14 });
+    }
+  });
+
+  it('returns undefined when no date can be recovered', () => {
+    expect(parseDob('sometime in the spring')).toBeUndefined();
+    expect(parseDob('')).toBeUndefined();
+  });
+});
+
+describe('verifyIdentity', () => {
+  const withDob = { ...context, birthDate: '1979-05-14', mock: false } as PatientContext;
+  const dobState = () => createCallState('call-dob', withDob);
+
+  it('accepts a matching date in any format the agent might send', async () => {
+    const s = dobState();
+    const r = await dispatchTool({ state: s, toolCallId: '1', name: 'verifyIdentity', args: { dateOfBirth: 'May 14 1979' } });
+    expect(s.dobVerified).toBe(true);
+    expect(r.detail?.verified).toBe(true);
+  });
+
+  it('gives a second try, then ends after two mismatches', async () => {
+    const s = dobState();
+    const first = await dispatchTool({ state: s, toolCallId: '1', name: 'verifyIdentity', args: { dateOfBirth: '1990-01-01' } });
+    expect(s.dobVerified).toBe(false);
+    expect(first.detail?.retry).toBe(true);
+    const second = await dispatchTool({ state: s, toolCallId: '2', name: 'verifyIdentity', args: { dateOfBirth: '1988-02-02' } });
+    expect(second.detail?.retry).toBe(false);
+    expect(s.dobAttempts).toBe(2);
+  });
+
+  it('does not strand the patient when no DOB is on file', async () => {
+    const s = createCallState('call-nodob', context); // context has no birthDate
+    await dispatchTool({ state: s, toolCallId: '1', name: 'verifyIdentity', args: { dateOfBirth: '2000-01-01' } });
+    expect(s.dobVerified).toBe(true);
   });
 });
 

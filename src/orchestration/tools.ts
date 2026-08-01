@@ -18,6 +18,22 @@ import type { CallOutcome, Concern, InstrumentAnswer, PatientContext, RiskAnswer
 
 export const AGENT_FUNCTIONS: AgentFunctionDeclaration[] = [
   {
+    name: 'verifyIdentity',
+    description:
+      'Check the date of birth the patient just gave against the record. Call this as soon as they state their date of birth, BEFORE any clinical questions. Convert what they said to a date and pass it. The tool — not you — decides whether it matches; do exactly what its result tells you.',
+    parameters: {
+      type: 'object',
+      properties: {
+        dateOfBirth: {
+          type: 'string',
+          description:
+            'The date of birth the patient stated, as YYYY-MM-DD (e.g. "1979-05-14"). Convert spoken forms like "May fourteenth nineteen seventy-nine" to this format.',
+        },
+      },
+      required: ['dateOfBirth'],
+    },
+  },
+  {
     name: 'chartLive',
     description:
       'Record the patient answer to one questionnaire item immediately after they answer it. Call this once per item, before moving to the next question.',
@@ -100,6 +116,9 @@ export interface CallState {
   submitted: boolean;
   questionnaireResponse?: QuestionnaireResponse;
   startedAt: string;
+  /** Identity check: how many times a DOB has been offered, and whether it matched. */
+  dobAttempts: number;
+  dobVerified: boolean;
   /** Idempotency: Deepgram can retry a function call. */
   handledCallIds: Set<string>;
 }
@@ -113,6 +132,8 @@ export function createCallState(callId: string, context: PatientContext): CallSt
     concerns: [],
     submitted: false,
     startedAt: new Date().toISOString(),
+    dobAttempts: 0,
+    dobVerified: false,
     handledCallIds: new Set(),
   };
 }
@@ -317,7 +338,96 @@ async function submitQuestionnaire(state: CallState): Promise<ToolResult> {
   return { say: 'Submitted. Give the closing recap and say goodbye.' };
 }
 
+const MONTHS = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
+/**
+ * Parse a date of birth spoken or written in almost any form into y/m/d.
+ *
+ * The agent is asked for ISO, but people (and speech-to-text) produce
+ * "May 14 1979", "14/05/1979", "5-14-79" and worse. Being liberal here is the
+ * whole point: a correct birth date must never be rejected because of format.
+ * Returns undefined only when no plausible date can be recovered.
+ */
+export function parseDob(input: string): { y: number; m: number; d: number } | undefined {
+  const s = String(input ?? '').trim().toLowerCase();
+  if (!s) return undefined;
+
+  const iso = s.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/);
+  if (iso) return { y: +iso[1]!, m: +iso[2]!, d: +iso[3]! };
+
+  const year = s.match(/\b(18|19|20)\d{2}\b/);
+  const monthName = MONTHS.findIndex((m) => s.includes(m));
+  if (year && monthName >= 0) {
+    const rest = s.replace(year[0], ' ');
+    const day = rest.match(/\b(\d{1,2})(?:st|nd|rd|th)?\b/);
+    if (day) return { y: +year[0], m: monthName + 1, d: +day[1]! };
+  }
+
+  // Numeric separators. A four-digit group fixes the year; otherwise assume the
+  // US month/day/year order the agent is prompted to send.
+  const parts = s.match(/\b(\d{1,4})\b/g);
+  if (parts && parts.length >= 3) {
+    const yi = parts.findIndex((p) => p.length === 4);
+    if (yi >= 0) {
+      const y = +parts[yi]!;
+      const [m, d] = parts.filter((_, i) => i !== yi).map(Number);
+      if (m && d) return { y, m: m > 12 && d <= 12 ? d : m, d: m > 12 && d <= 12 ? m : d };
+    }
+  }
+  return undefined;
+}
+
+const sameDate = (
+  a: { y: number; m: number; d: number },
+  b: { y: number; m: number; d: number },
+): boolean => a.y === b.y && a.m === b.m && a.d === b.d;
+
+async function verifyIdentity(state: CallState, args: Record<string, unknown>): Promise<ToolResult> {
+  const onFile = state.context.birthDate;
+  // Nothing to check against — do not strand the patient on a record gap.
+  if (!onFile) {
+    state.dobVerified = true;
+    logger.warn({ callId: state.callId }, 'verify.no-dob-on-file');
+    return { say: 'No date of birth is on file, so identity cannot be checked here. Continue with the check-in.' };
+  }
+
+  state.dobAttempts += 1;
+  const spoken = String(args.dateOfBirth ?? '');
+  const given = parseDob(spoken);
+  const expected = parseDob(onFile);
+  const matched = Boolean(given && expected && sameDate(given, expected));
+
+  logger.info(
+    { callId: state.callId, attempt: state.dobAttempts, matched, mock: !state.context.birthDate },
+    'verify.dob',
+  );
+
+  if (matched) {
+    state.dobVerified = true;
+    return {
+      say: 'That matches our records. Thank them briefly and move on to the first question.',
+      detail: { verified: true, attempts: state.dobAttempts },
+    };
+  }
+
+  if (state.dobAttempts < 2) {
+    return {
+      say: "That did not match. Ask them, warmly, to say their full date of birth once more — month, day and year. This is their second and final try.",
+      detail: { verified: false, attempts: state.dobAttempts, retry: true },
+    };
+  }
+
+  return {
+    say: 'That still does not match after two tries. Apologise, tell them the clinic will follow up directly to confirm their details, and end the call warmly. Do not ask the clinical questions.',
+    detail: { verified: false, attempts: state.dobAttempts, retry: false },
+  };
+}
+
 const HANDLERS: Record<string, (state: CallState, args: Record<string, unknown>) => Promise<ToolResult>> = {
+  verifyIdentity,
   chartLive,
   chartRiskAnswer,
   recordConcern,
