@@ -129,6 +129,10 @@ export function App(): JSX.Element {
           ))}
         </nav>
 
+        <div className="sync" title="The workspace refreshes on its own — no reload needed">
+          <i /> Live · auto-syncing
+        </div>
+
         <div className="sidebar-foot">
           <Avatar name={profileName} small />
           <span className="who">

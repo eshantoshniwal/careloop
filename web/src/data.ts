@@ -68,7 +68,7 @@ export function priorityOf(input: {
 
 // ---------------------------------------------------------------- hooks
 
-export function useDraftPlans(): {
+export function useDraftPlans(pollMs = 15000): {
   plans: CarePlan[];
   loading: boolean;
   error?: string;
@@ -81,36 +81,50 @@ export function useDraftPlans(): {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    medplum
-      .searchResources('CarePlan', { status: 'draft', _sort: '-_lastUpdated', _count: '100' })
-      .then((results) => {
+    let first = true;
+    // First load shows the skeleton; background polls swap the data in quietly,
+    // so a plan appearing after a call never requires a manual reload and the
+    // page never flashes a loading state at a clinician who is already reading.
+    async function load(): Promise<void> {
+      try {
+        const results = await medplum.searchResources('CarePlan', {
+          status: 'draft',
+          _sort: '-_lastUpdated',
+          _count: '100',
+        });
         if (cancelled) return;
         setPlans([...results]);
         setError(undefined);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load plans.');
-      })
-      .finally(() => !cancelled && setLoading(false));
-    return () => { cancelled = true; };
-  }, [tick]);
+      } catch (err: unknown) {
+        if (!cancelled && first) setError(err instanceof Error ? err.message : 'Could not load plans.');
+      } finally {
+        if (!cancelled && first) { setLoading(false); first = false; }
+      }
+    }
+    void load();
+    const timer = pollMs ? setInterval(load, pollMs) : undefined;
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
+  }, [tick, pollMs]);
 
   return { plans, loading, error, refresh: useCallback(() => setTick((t) => t + 1), []) };
 }
 
-export function usePatients(): { patients: Patient[]; refresh: () => void } {
+export function usePatients(pollMs = 20000): { patients: Patient[]; refresh: () => void } {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    medplum
-      .searchResources('Patient', { _count: '100', _sort: '-_lastUpdated' })
-      .then((results) => !cancelled && setPatients([...results]))
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [tick]);
+    async function load(): Promise<void> {
+      try {
+        const results = await medplum.searchResources('Patient', { _count: '100', _sort: '-_lastUpdated' });
+        if (!cancelled) setPatients([...results]);
+      } catch { /* transient — the next tick retries */ }
+    }
+    void load();
+    const timer = pollMs ? setInterval(load, pollMs) : undefined;
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
+  }, [tick, pollMs]);
 
   return { patients, refresh: useCallback(() => setTick((t) => t + 1), []) };
 }
@@ -157,18 +171,18 @@ export interface CallRecord {
 }
 
 /** Call log, derived from the charting feed since there is no separate store. */
-export function useCalls(): CallRecord[] {
+export function useCalls(pollMs = 15000): CallRecord[] {
   const [calls, setCalls] = useState<CallRecord[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    medplum
-      .searchResources('Communication', {
-        category: CATEGORIES.call,
-        _sort: '-sent',
-        _count: '50',
-      })
-      .then((results) => {
+    async function load(): Promise<void> {
+      try {
+        const results = await medplum.searchResources('Communication', {
+          category: CATEGORIES.call,
+          _sort: '-sent',
+          _count: '50',
+        });
         if (cancelled) return;
         setCalls(
           [...results].map((communication) => {
@@ -182,10 +196,12 @@ export function useCalls(): CallRecord[] {
             };
           }),
         );
-      })
-      .catch(() => undefined);
-    return () => { cancelled = true; };
-  }, []);
+      } catch { /* transient — the next tick retries */ }
+    }
+    void load();
+    const timer = pollMs ? setInterval(load, pollMs) : undefined;
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
+  }, [pollMs]);
 
   return calls;
 }

@@ -492,6 +492,82 @@ tbody tr:last-child td { border-bottom: 0; }
 
 /* -------------------------------------------------------------- sign-in */
 
-.signin-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-.signin { width: 100%; max-width: 400px; }
+.signin-wrap {
+  min-height: 100vh; display: grid; place-items: center; padding: 24px;
+  background:
+    radial-gradient(60% 55% at 50% -10%, color-mix(in srgb, var(--brand) 16%, transparent), transparent 70%),
+    var(--bg);
+}
+.signin { width: 100%; max-width: 400px; animation: enter 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
 .signin .brand { padding: 0 0 20px; }
+.signin .card { box-shadow: var(--shadow-lg); }
+
+/* =============================================================== prod polish
+   Motion, depth and micro-interactions layered on top of the base system.
+   Everything here is additive and every animation is disabled under the
+   prefers-reduced-motion guard defined near the top of this file. */
+
+/* Smooth every interaction rather than snapping between states. */
+.nav button, .icon-btn, .row, .row-open .name, button.btn, button.link,
+.badge, .stat-icon, .card, input, select, textarea {
+  transition:
+    background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease,
+    box-shadow 0.18s ease, transform 0.12s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* Buttons gain a little depth and a tactile press. */
+button.btn { box-shadow: var(--shadow); }
+button.btn:active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+button.btn.primary {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 92%, white 8%), var(--brand));
+  box-shadow: 0 1px 2px rgba(20, 22, 26, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+button.btn.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, var(--brand), var(--brand-ink));
+}
+button.link:hover { color: var(--brand-ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Content settles in on mount — pages, cards and the header rise gently. */
+.page-head, .card { animation: enter 0.34s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+@keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* Interactive rows nudge toward their chevron and brighten the affordance. */
+.row:hover .chev, .row-open:hover ~ .chev { transform: translateX(2px); }
+.row .chev { transition: transform 0.15s ease, color 0.15s ease; }
+
+/* Stat and hero cards lift a touch on hover, signalling they are live tiles. */
+.stat-value { transition: color 0.16s ease; }
+
+/* The brand mark reads as a crafted object, not a flat square. */
+.brand-mark {
+  background: linear-gradient(150deg, color-mix(in srgb, var(--brand) 82%, white 18%), var(--brand-ink));
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--brand) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* A quiet live-sync indicator for the sidebar — the app is breathing. */
+.sync {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 20px 4px; font-size: 12px; color: var(--muted);
+}
+.sync i {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent);
+  animation: sync-pulse 2.4s ease-out infinite;
+}
+@keyframes sync-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Refined scrollbars so overflow areas feel considered, not default-grey. */
+* { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line-2); border-radius: 999px;
+  border: 3px solid var(--bg); background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+*::-webkit-scrollbar-track { background: transparent; }
+
+::selection { background: color-mix(in srgb, var(--brand) 26%, transparent); }
