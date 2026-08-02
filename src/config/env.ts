@@ -21,7 +21,7 @@ export const env = {
    * Deepgram fixes the function list at Settings time, so both modes declare
    * every tool upfront; state mode gates them through the per-node prompt.
    */
-  orchMode: (str('ORCH_MODE', 'prompt') === 'state' ? 'state' : 'prompt') as 'prompt' | 'state',
+  orchMode: (str('ORCH_MODE', 'state') === 'prompt' ? 'prompt' : 'state') as 'prompt' | 'state',
   toolSharedSecret: str('TOOL_SHARED_SECRET', 'dev-secret'),
 
   medplum: {
@@ -39,6 +39,9 @@ export const env = {
   deepgram: {
     apiKey: str('DEEPGRAM_API_KEY'),
     agentUrl: str('DEEPGRAM_AGENT_URL', 'wss://agent.deepgram.com/v1/agent/converse'),
+    // Use a conventional low-latency chat/tool model for the live call. The
+    // reasoning-model default emitted stage directions and speculative tools.
+    thinkModel: str('DEEPGRAM_THINK_MODEL', 'gpt-4o'),
   },
 
   llm: {

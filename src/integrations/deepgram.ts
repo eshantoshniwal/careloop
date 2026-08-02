@@ -122,7 +122,11 @@ export class DeepgramAgent extends EventEmitter {
           provider: { type: 'deepgram', model: this.settings.listenModel ?? 'nova-3' },
         },
         think: {
-          provider: { type: 'open_ai', model: this.settings.thinkModel ?? 'gpt-4o-mini' },
+          provider: {
+            type: 'open_ai',
+            model: this.settings.thinkModel ?? env.deepgram.thinkModel,
+            temperature: 0.2,
+          },
           prompt: this.settings.prompt,
           functions: this.settings.functions.map((fn) => ({
             name: fn.name,
@@ -226,10 +230,10 @@ export class DeepgramAgent extends EventEmitter {
     );
   }
 
-  /** Ask the agent to say something verbatim — used for emergency rules. */
-  injectMessage(text: string): void {
+  /** Ask the agent to say something verbatim — used for deterministic flow recovery. */
+  injectMessage(text: string, behavior: 'default' | 'queue' | 'interrupt' = 'default'): void {
     if (this.socket?.readyState !== WebSocket.OPEN) return;
-    this.socket.send(JSON.stringify({ type: 'InjectAgentMessage', content: text }));
+    this.socket.send(JSON.stringify({ type: 'InjectAgentMessage', message: text, behavior }));
   }
 
   private cleanup(): void {

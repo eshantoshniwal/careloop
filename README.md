@@ -125,14 +125,14 @@ The interview is described once, in `src/orchestration/flow.ts`, and rendered
 two ways:
 
 - **`prompt`** flattens the whole flow into one system prompt with every tool
-  available. This is the live default, because voice-agent providers generally
-  cannot change a tool set mid-call.
-- **`state`** walks the flow node by node and exposes only the tools that node
-  allows.
+  available. It remains available for comparison with `ORCH_MODE=prompt`.
+- **`state`** is the live default. It walks the flow node by node; for scored
+  and risk questions the bridge speaks the exact question once while the model
+  only interprets the patient's natural-language answer.
 
 `npm run simulate` prints both renderings so they can be compared
 deterministically. Because both come from one spec, they cannot drift into
-asking different questions. Switch with `ORCH_MODE=state`.
+asking different questions.
 
 ## Tests
 

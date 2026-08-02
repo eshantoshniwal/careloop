@@ -32,6 +32,13 @@ describe('FlowStateMachine', () => {
     expect(sm.onUserTurn()?.nodeId).toBe('verify');
   });
 
+  it('does not treat a greeting repair as identity confirmation', () => {
+    const sm = machine();
+    expect(sm.onUserTurn('Hello?')).toBeUndefined();
+    expect(sm.currentNodeId).toBe('greeting');
+    expect(sm.onUserTurn('Yes, speaking.')?.nodeId).toBe('verify');
+  });
+
   it('accepts a verified identity even while still on the greeting node', () => {
     // The tool call can beat the user-turn transcript when the patient
     // confirms and states their DOB in quick succession.
@@ -48,9 +55,11 @@ describe('FlowStateMachine', () => {
     expect(sm.currentNodeId).toBe('verify');
     const next = sm.onToolResult('verifyIdentity', { verified: true });
     expect(next?.nodeId).toBe(`item:${asthmaModule.instrument.items[0]!.linkId}`);
-    // The cue rides the tool result so the model's next utterance is the real
-    // first question, not an invented one.
+    // The bridge owns the next utterance; the model only interprets its answer.
+    expect(next?.spoken).toBe(asthmaModule.instrument.items[0]!.prompt);
     expect(next?.cue).toContain(asthmaModule.instrument.items[0]!.prompt);
+    expect(next?.cue).toContain('Do NOT speak when this step begins');
+    expect(next?.cue).toContain('ONLY action is chartLive');
   });
 
   it('does not advance verify on user turns — the tool decides', () => {
@@ -70,6 +79,65 @@ describe('FlowStateMachine', () => {
     expect(sm.currentNodeId).toBe(`item:${first!.linkId}`);
     expect(sm.onToolResult('chartLive', { linkId: first!.linkId, value: 3 })?.nodeId).toBe(
       `item:${second!.linkId}`,
+    );
+  });
+
+  it('puts the mandatory chart call in every charted-node transition cue', () => {
+    const flow = buildIntakeFlow(asthmaModule);
+    for (const node of flow.nodes) {
+      if (node.kind === 'instrument-item') {
+        expect(node.cue).toContain('ONLY action is chartLive');
+        expect(node.cue).toContain('Never acknowledge or ask this question yourself');
+      }
+      if (node.kind === 'risk-question') {
+        expect(node.cue).toContain('ONLY action is chartRiskAnswer');
+        expect(node.cue).toContain('Never acknowledge or ask this question yourself');
+      }
+    }
+  });
+
+  it('re-anchors tool capture on a substantive answer but ignores instrument backchannels', () => {
+    const sm = machine();
+    sm.onUserTurn();
+    sm.onToolResult('verifyIdentity', { verified: true });
+    const first = asthmaModule.instrument.items[0]!;
+    expect(sm.answerCaptureNudge('Yeah.')).toBeUndefined();
+    expect(sm.answerCaptureNudge('I have been having trouble getting around lately.')).toContain(
+      `chartLive for linkId "${first.linkId}"`,
+    );
+    expect(sm.answerCaptureNudge('A lot of the time.')).toContain(first.scaleHint);
+    expect(sm.answerCaptureNudge('A lot of the time.')).toContain('patient need not say a number');
+    expect(sm.answerCaptureNudge('Sometimes.')).toContain('Accept vague but meaningful natural language');
+
+    for (const item of asthmaModule.instrument.items) {
+      sm.onToolResult('chartLive', { linkId: item.linkId, value: 3 });
+    }
+    const risk = asthmaModule.riskQuestions[0];
+    if (risk) {
+      // "No" is a complete and important answer to a yes/no risk question.
+      expect(sm.answerCaptureNudge('No.')).toContain(
+        `chartRiskAnswer for linkId "${risk.linkId}"`,
+      );
+    }
+  });
+
+  it('rejects premature, stale and out-of-order chart calls', () => {
+    const sm = machine();
+    sm.onUserTurn();
+    sm.onToolResult('verifyIdentity', { verified: true });
+    const [first, second] = asthmaModule.instrument.items;
+
+    expect(sm.chartCallRejection('chartLive', { linkId: first!.linkId, value: 3 }, false)).toContain(
+      'premature',
+    );
+    expect(sm.chartCallRejection('chartLive', { linkId: second!.linkId, value: 3 }, true)).toContain(
+      'stale-or-out-of-order',
+    );
+    expect(sm.chartCallRejection('chartLive', { linkId: first!.linkId, value: 3 }, true)).toBeUndefined();
+
+    sm.onToolResult('chartLive', { linkId: first!.linkId, value: 3 });
+    expect(sm.chartCallRejection('chartLive', { linkId: first!.linkId, value: 3 }, true)).toContain(
+      'stale-or-out-of-order',
     );
   });
 

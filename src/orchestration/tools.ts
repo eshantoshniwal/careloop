@@ -36,12 +36,16 @@ export const AGENT_FUNCTIONS: AgentFunctionDeclaration[] = [
   {
     name: 'chartLive',
     description:
-      'Record the patient answer to one questionnaire item immediately after they answer it. Call this once per item, before moving to the next question.',
+      'Record one questionnaire answer immediately after the patient finishes answering. The patient normally answers in natural language, not with a number: infer the closest scale value yourself and call this function. This must be your first and only action after a usable answer; do not acknowledge, speak, or repeat the question first. Call once per item.',
     parameters: {
       type: 'object',
       properties: {
         linkId: { type: 'string', description: 'The item id, e.g. "act-1" or "phq9-3".' },
-        value: { type: 'integer', description: 'The numeric answer the patient gave.' },
+        value: {
+          type: 'integer',
+          description:
+            'The scale value YOU infer from the patient’s natural-language answer. The patient does not need to say a number. Map phrases such as “a lot,” “every day,” or “not at all” to the closest value using the current item’s scale.',
+        },
       },
       required: ['linkId', 'value'],
     },
@@ -49,7 +53,7 @@ export const AGENT_FUNCTIONS: AgentFunctionDeclaration[] = [
   {
     name: 'chartRiskAnswer',
     description:
-      'Record an answer to one of the supplemental future-risk questions. These are not part of the questionnaire total.',
+      'Record an answer to one supplemental future-risk question. This function call must be your first and only action after the patient finishes answering: do not acknowledge, speak, or repeat the question before calling it. These answers are not part of the questionnaire total.',
     parameters: {
       type: 'object',
       properties: {

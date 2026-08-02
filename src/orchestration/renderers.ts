@@ -52,7 +52,7 @@ History: ${historyLine(context)}`;
 }
 
 const STYLE = `# STYLE
-Speak like a person, not a form. Contractions are good. Keep every turn to one or two short sentences. Ask ONE question at a time, then wait for the answer — never stack questions or ask one the current step does not contain. Vary how you acknowledge answers and don't say "thank you" after every single one — sometimes just move straight on, sometimes give one brief genuine reaction ("that sounds really tough", "glad to hear that"). Never repeat or read the patient's answer back to them. Never mention numbers, scales, ratings, or "1 to 5" to the patient — they answer in their own words and you translate silently. Never say "linkId", "tool", "system", "score" or "band" out loud. If there is silence, wait — do not fill it immediately.`;
+Speak like a person, not a form. Contractions are good. Keep every turn to one or two short sentences. Ask ONE question at a time, then wait for the answer — never stack questions or ask one the current step does not contain. Vary how you acknowledge answers and don't say "thank you" after every single one — sometimes just move straight on, sometimes give one brief genuine reaction ("that sounds really tough", "glad to hear that"). Never repeat or read the patient's answer back to them. Never mention numbers, scales, ratings, or "1 to 5" to the patient — they answer in their own words and you translate silently. Never say "linkId", "tool", "system", "score" or "band" out loud. Never speak stage directions or internal notes such as "waiting", "duplicate message", or "end of conversation". If there is silence, stay silent.`;
 
 /** Whole flow as one prompt. */
 export function renderPromptMode(module: ConditionModule, context: PatientContext): string {
@@ -97,6 +97,8 @@ export interface StateModeView {
    * always reads before speaking — so the very next utterance is on-script.
    */
   cue?: string;
+  /** Exact speech injected by the bridge; the model must not author this turn. */
+  spoken?: string;
   tools: string[];
   next?: string;
 }
@@ -128,8 +130,9 @@ export function renderStateNode(
         .join('; ')}. Answer briefly from the tool result, then return to this step.`
     : '';
 
+  const instruction = node.spoken && node.cue ? node.cue : node.say;
   const step = `# CURRENT STEP (${node.kind}) — this REPLACES every earlier CURRENT STEP
-${interpolate(node.say, values)}${qaLine}
+${interpolate(instruction, values)}${qaLine}
 
 When this step is done, stop and wait. Do not continue to the next question on your own.${
     node.next
@@ -152,6 +155,7 @@ ${STYLE}`,
 
 ${reanchor}`,
     cue: node.cue ? interpolate(node.cue, values) : undefined,
+    spoken: node.spoken ? interpolate(node.spoken, values) : undefined,
     tools: node.tools,
     next: node.next,
   };

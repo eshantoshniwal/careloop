@@ -9,7 +9,7 @@ import { renderPromptMode, renderStateNode } from './renderers.js';
  * The live agent prompt.
  *
  * Both orchestration modes render from the single flow spec in `flow.ts`, so
- * the interview cannot drift between them. `prompt` is the live default; see
+ * the interview cannot drift between them. `state` is the live default; see
  * the note on `env.orchMode`.
  */
 export function buildAgentPrompt(input: {
